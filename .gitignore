@@ -1,0 +1,14 @@
+.venv/
+.claude/
+.omc/
+__pycache__/
+.DS_Store
+*.pyc
+
+# 작업용 파일 — Pages 배포엔 index.html 만 필요
+CLAUDE.md
+build_map.py
+sheet_lib.py
+build_itinerary.py
+일정.txt
+sydney_map.html

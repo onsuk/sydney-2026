@@ -1,0 +1,2535 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    
+    <meta name='viewport' content='width=device-width, initial-scale=1, maximum-scale=5'>
+    <title>Sydney 5박 6일 동선 지도</title>
+    <style>
+      body { margin: 0; }
+      #syd-panel {
+        position: fixed; top: 0; left: 0; height: 100vh; width: 340px;
+        background: #fff; border-right: 1px solid #ddd; overflow-y: auto;
+        font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif;
+        z-index: 9999; box-shadow: 2px 0 10px rgba(0,0,0,0.06);
+        transition: transform 0.25s ease;
+      }
+      #syd-panel.collapsed { transform: translateX(-340px); }
+      #syd-panel-toggle {
+        position: fixed; top: 12px; left: 352px; z-index: 10000;
+        background: #111; color: white; border: none; border-radius: 6px;
+        padding: 6px 12px; font-size: 12px; cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25); transition: left 0.25s ease;
+      }
+      #syd-panel.collapsed + #syd-panel-toggle { left: 12px; }
+      #syd-panel header {
+        padding: 12px 14px; border-bottom: 1px solid #eee;
+        background: #fafafa; position: sticky; top: 0; z-index: 2;
+      }
+      #syd-panel h1 { margin: 0; font-size: 14px; font-weight: 700; }
+      #syd-panel h1 .sub { color: #888; font-weight: 400; font-size: 12px; }
+      .preset-row, .search-row { margin-top: 8px; display: flex; gap: 6px; }
+      .preset-row button {
+        flex: 1; padding: 5px 8px; font-size: 11px; border: 1px solid #ccc;
+        background: white; border-radius: 4px; cursor: pointer;
+      }
+      .preset-row button:hover { background: #f0f0f0; }
+      #syd-search {
+        flex: 1; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px;
+        font-size: 12px; box-sizing: border-box;
+      }
+      #syd-search-clear {
+        padding: 4px 8px; border: 1px solid #ccc; background: white;
+        border-radius: 4px; font-size: 11px; cursor: pointer;
+      }
+      .day-section { padding: 6px 0; border-bottom: 1px solid #eee; }
+      .day-header {
+        padding: 10px 14px 6px; font-weight: 700; font-size: 13px;
+        display: flex; align-items: center; justify-content: space-between;
+      }
+      .day-header .km { color: #888; font-weight: 400; font-size: 11px; }
+      .stop-card {
+        padding: 7px 14px; display: flex; gap: 8px;
+        cursor: pointer; border-left: 3px solid transparent;
+        font-size: 12px; line-height: 1.4;
+      }
+      .stop-card:hover { background: #f7f7f7; border-left-color: currentColor; }
+      .stop-card.syd-active {
+        background: #fff8c4; border-left-color: currentColor;
+      }
+      .stop-memo {
+        margin-top: 3px; font-size: 11px; color: #555;
+        padding: 3px 6px; background: #f6f4ff; border-left: 2px solid currentColor;
+        border-radius: 2px; line-height: 1.4;
+      }
+      .day-badge {
+        display: inline-block; padding: 1px 6px; border-radius: 8px;
+        background: #eee; color: #555; font-size: 10px; font-weight: 600;
+        margin-left: 6px;
+      }
+      .day-badge.today { background: #ff5252; color: white; }
+      .day-badge.past { background: #ddd; color: #999; }
+      .stop-mini-badge {
+        display: inline-block; padding: 1px 5px;
+        background: rgba(0,0,0,0.06); color: #555;
+        border-radius: 3px; font-size: 9px; font-weight: 600;
+        margin-left: 4px; vertical-align: middle;
+      }
+      /* 다크 모드 (Leaflet baselayerchange 가 body.syd-dark 토글) */
+      body.syd-dark { background: #1a1a1e; }
+      body.syd-dark #syd-panel { background: #1c1c20; color: #ddd; border-right-color: #333; }
+      body.syd-dark #syd-panel header { background: #25252b; border-bottom-color: #333; }
+      body.syd-dark #syd-search,
+      body.syd-dark .preset-row button,
+      body.syd-dark #syd-search-clear {
+        background: #25252b; color: #ddd; border-color: #444;
+      }
+      body.syd-dark .preset-row button:hover { background: #303038; }
+      body.syd-dark .stop-card:hover { background: #26262c; }
+      body.syd-dark .stop-card.syd-active { background: #3a3a20; }
+      body.syd-dark .stop-name { color: #eee; }
+      body.syd-dark .stop-when, body.syd-dark .day-header .km { color: #888; }
+      body.syd-dark .stop-memo { background: #2a2530; }
+      body.syd-dark .stop-mini-badge { background: rgba(255,255,255,0.1); color: #bbb; }
+      body.syd-dark .day-badge { background: #333; color: #ccc; }
+      body.syd-dark .day-badge.today { background: #ff5252; color: white; }
+      body.syd-dark .day-section { border-bottom-color: #2a2a30; }
+      .stop-num {
+        width: 22px; height: 22px; border-radius: 50%; color: white;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; flex-shrink: 0;
+      }
+      .stop-body { flex: 1; min-width: 0; }
+      .stop-name { font-weight: 600; color: #222; }
+      .stop-when { color: #888; font-size: 11px; }
+      .stop-stay { color: #aaa; font-size: 10px; margin-top: 1px; }
+      .syd-empty { padding: 14px; color: #999; font-size: 12px; }
+      @keyframes syd-pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.25); }
+        100% { transform: scale(1); }
+      }
+      .syd-mk-pulse { animation: syd-pulse 0.7s ease-in-out infinite; }
+      .leaflet-popup-content { margin: 10px 12px !important; line-height: 1.5; }
+      .leaflet-tooltip { font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif; font-size: 12px; }
+      .folium-map { margin-left: 340px; transition: margin-left 0.25s ease; }
+      #syd-panel.collapsed ~ .folium-map { margin-left: 0; }
+      @media (max-width: 720px) {
+        #syd-panel { width: 280px; transform: translateX(-280px); }
+        #syd-panel-toggle { left: 12px; }
+        #syd-panel:not(.collapsed) { transform: translateX(0); }
+        #syd-panel:not(.collapsed) + #syd-panel-toggle { left: 292px; }
+        .folium-map { margin-left: 0; }
+      }
+    </style>
+    
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_577bc5c034b5c13fd1f37345151f8702 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+    <aside id="syd-panel">
+      <header>
+        <h1>Sydney 5박 6일 동선 <span class="sub">2026.06.01 ~ 06</span></h1>
+        <div class="preset-row">
+          <button onclick="sydZoom('syd')">시내</button>
+          <button onclick="sydZoom('bm')">블루마운틴</button>
+          <button onclick="sydZoom('all')">전체</button>
+          <button onclick="sydDownloadGpx()" title="GPX 파일로 다운로드 (Google My Maps, 모바일 네비 등에 가져가기)">↓ GPX</button>
+        </div>
+        <div class="search-row">
+          <input id="syd-search" placeholder="장소 검색 (예: 카페, opera, 동물원)" oninput="sydSearch(this.value)">
+          <button id="syd-search-clear" onclick="document.getElementById('syd-search').value='';sydSearch('')">×</button>
+        </div>
+      </header>
+      <div id="syd-list"></div>
+    </aside>
+    <button id="syd-panel-toggle" onclick="
+      var p=document.getElementById('syd-panel');
+      p.classList.toggle('collapsed');
+      this.textContent=p.classList.contains('collapsed')?'☰ 일정':'← 접기';
+    ">← 접기</button>
+    
+    
+    <script>
+      var SYD_DAYS = [{"name": "Day 1 · 06.01 (월) · 도착 + 시티 적응", "color": "#e6194B", "date": "2026-06-01", "total_km": 10.4, "stops": [{"day_idx": 1, "idx": 1, "name": "Sydney Airport T1", "lat": -33.9399, "lon": 151.1753, "when": "06:20 도착", "cat": "transit", "emoji": "🚇", "stay": "머무름 ~1시간 40분", "memo": "입국 수속 1~1.5시간 예상", "hay": "sydney airport t1 transit 이동/공항·역·페리 입국 수속 1~1.5시간 예상 06:20 도착", "badges": ["도착"], "card_id": "syd-card-1-1", "marker_var": "marker_35971f994a7bcd6863b065e902e149ec"}, {"day_idx": 1, "idx": 2, "name": "Meriton Suites World Tower (짐 보관)", "lat": -33.8779, "lon": 151.2068, "when": "08:00", "cat": "hotel", "emoji": "🏨", "stay": "머무름 ~2시간 30분", "memo": "Maxi Taxi (6인+짐) 약 30~40분, 90~110 AUD", "hay": "meriton suites world tower (짐 보관) hotel 베이스 호텔 maxi taxi (6인+짐) 약 30~40분, 90~110 aud 08:00", "badges": [], "card_id": "syd-card-1-2", "marker_var": null}, {"day_idx": 1, "idx": 3, "name": "Queen Victoria Building", "lat": -33.8719, "lon": 151.2069, "when": "10:30", "cat": "shop", "emoji": "🛍️", "stay": "머무름 ~1시간", "memo": "호텔 도보 3분 · 실내 따뜻", "hay": "queen victoria building shop 쇼핑/시장 호텔 도보 3분 · 실내 따뜻 10:30", "badges": [], "card_id": "syd-card-1-3", "marker_var": "marker_4e28ea447e462489642b9f928804e4d2"}, {"day_idx": 1, "idx": 4, "name": "Hyde Park / St Mary's Cathedral", "lat": -33.8718, "lon": 151.2129, "when": "11:30", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~5시간", "memo": "QVB → 도보 7분", "hay": "hyde park / st mary's cathedral sight 관광/뷰/이벤트 qvb → 도보 7분 11:30", "badges": [], "card_id": "syd-card-1-4", "marker_var": "marker_f365a3b9b95d736c1bc735a50b1804b7"}, {"day_idx": 1, "idx": 5, "name": "Darling Harbour / Tumbalong Playground", "lat": -33.8755, "lon": 151.2014, "when": "16:30", "cat": "play", "emoji": "🎡", "stay": "머무름 ~3시간", "memo": "호텔 도보 5분 · 첫째 놀이", "hay": "darling harbour / tumbalong playground play 동물원/놀이/야경 호텔 도보 5분 · 첫째 놀이 16:30", "badges": [], "card_id": "syd-card-1-5", "marker_var": "marker_384948bbd1e3358a17da6c8e7f034448"}, {"day_idx": 1, "idx": 6, "name": "Meriton Suites World Tower (복귀)", "lat": -33.8779, "lon": 151.2068, "when": "19:30", "cat": "hotel", "emoji": "🏨", "stay": "", "memo": "일찍 취침", "hay": "meriton suites world tower (복귀) hotel 베이스 호텔 일찍 취침 19:30", "badges": ["복귀"], "card_id": "syd-card-1-6", "marker_var": null}], "layer_var": "feature_group_13fd0a580aa4f35040b1cffa244790cd", "is_bm": false, "default_visible": true}, {"name": "Day 2 · 06.02 (화) · Circular Quay + 식물원 일몰", "color": "#4363d8", "date": "2026-06-02", "total_km": 7.3, "stops": [{"day_idx": 2, "idx": 1, "name": "Single O Coffee (Surry Hills)", "lat": -33.8843, "lon": 151.2106, "when": "09:00", "cat": "food", "emoji": "☕", "stay": "머무름 ~1시간 30분", "memo": "시드니 3대 커피 — 호텔에서 도보/택시 10분", "hay": "single o coffee (surry hills) food 카페/식당 시드니 3대 커피 — 호텔에서 도보/택시 10분 09:00", "badges": [], "card_id": "syd-card-2-1", "marker_var": "marker_0c6cae92d2b3ce3864277870c7e34616"}, {"day_idx": 2, "idx": 2, "name": "Circular Quay", "lat": -33.8614, "lon": 151.2108, "when": "10:30", "cat": "transit", "emoji": "🚇", "stay": "머무름 ~15분", "memo": "라이트레일 또는 페리", "hay": "circular quay transit 이동/공항·역·페리 라이트레일 또는 페리 10:30", "badges": [], "card_id": "syd-card-2-2", "marker_var": "marker_80bb1713bccb610c57b41ed910778e49"}, {"day_idx": 2, "idx": 3, "name": "Sydney Opera House", "lat": -33.8568, "lon": 151.2153, "when": "10:45 외관", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~45분", "memo": "", "hay": "sydney opera house sight 관광/뷰/이벤트  10:45 외관", "badges": [], "card_id": "syd-card-2-3", "marker_var": "marker_74fa03f405b6b9f0a1721aaddc564885"}, {"day_idx": 2, "idx": 4, "name": "Royal Botanic Garden", "lat": -33.8642, "lon": 151.2166, "when": "11:30", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~5시간", "memo": "유모차 OK · 정원 카페", "hay": "royal botanic garden sight 관광/뷰/이벤트 유모차 ok · 정원 카페 11:30", "badges": [], "card_id": "syd-card-2-4", "marker_var": "marker_7954735e4ba9258a9e115a7880452865"}, {"day_idx": 2, "idx": 5, "name": "Mrs Macquaries Point", "lat": -33.8597, "lon": 151.2226, "when": "16:30 일몰", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~3시간", "memo": "일몰 16:54 — 30분 전 도착 권장", "hay": "mrs macquaries point sight 관광/뷰/이벤트 일몰 16:54 — 30분 전 도착 권장 16:30 일몰", "badges": ["도착", "일몰"], "card_id": "syd-card-2-5", "marker_var": "marker_1e51f1c41930d2d1080e58f0a3811e43"}, {"day_idx": 2, "idx": 6, "name": "Meriton Suites World Tower (복귀)", "lat": -33.8779, "lon": 151.2068, "when": "19:30", "cat": "hotel", "emoji": "🏨", "stay": "", "memo": "", "hay": "meriton suites world tower (복귀) hotel 베이스 호텔  19:30", "badges": ["복귀"], "card_id": "syd-card-2-6", "marker_var": null}], "layer_var": "feature_group_bed8ea567580ef357a7e5138d46e17f8", "is_bm": false, "default_visible": true}, {"name": "Day 3 · 06.03 (수) · 타롱가 동물원 + 시티", "color": "#3cb44b", "date": "2026-06-03", "total_km": 8.7, "stops": [{"day_idx": 3, "idx": 1, "name": "Circular Quay (페리 Wharf 4)", "lat": -33.8614, "lon": 151.2108, "when": "09:30", "cat": "transit", "emoji": "🚇", "stay": "머무름 ~30분", "memo": "약 12분 · Opal Card", "hay": "circular quay (페리 wharf 4) transit 이동/공항·역·페리 약 12분 · opal card 09:30", "badges": [], "card_id": "syd-card-3-1", "marker_var": "marker_e916bbf12304403af6cead7020cbc98c"}, {"day_idx": 3, "idx": 2, "name": "Taronga Zoo", "lat": -33.843, "lon": 151.2412, "when": "10:00", "cat": "play", "emoji": "🎡", "stay": "머무름 ~5시간", "memo": "입구에서 Sky Safari 곤돌라 → 위에서 아래로 관람 추천", "hay": "taronga zoo play 동물원/놀이/야경 입구에서 sky safari 곤돌라 → 위에서 아래로 관람 추천 10:00", "badges": [], "card_id": "syd-card-3-2", "marker_var": "marker_21aab19ffc145423b41729319306d4e6"}, {"day_idx": 3, "idx": 3, "name": "Pitt St Mall — AG LEGO Store", "lat": -33.8704, "lon": 151.2087, "when": "15:00", "cat": "shop", "emoji": "🛍️", "stay": "머무름 ~1시간", "memo": "세계 최대 LEGO 인증점", "hay": "pitt st mall — ag lego store shop 쇼핑/시장 세계 최대 lego 인증점 15:00", "badges": [], "card_id": "syd-card-3-3", "marker_var": "marker_083fe02a5ed0edf9206ad571564b394b"}, {"day_idx": 3, "idx": 4, "name": "Strand Arcade — Haigh's", "lat": -33.8712, "lon": 151.2078, "when": "16:00", "cat": "shop", "emoji": "🛍️", "stay": "머무름 ~30분", "memo": "건물 자체도 명소", "hay": "strand arcade — haigh's shop 쇼핑/시장 건물 자체도 명소 16:00", "badges": [], "card_id": "syd-card-3-4", "marker_var": "marker_bae20a9dd4fb5f68cd0884b1d9016b03"}, {"day_idx": 3, "idx": 5, "name": "Gumption Coffee (QVB)", "lat": -33.8716, "lon": 151.2061, "when": "16:30", "cat": "food", "emoji": "☕", "stay": "머무름 ~3시간", "memo": "QVB 인근 · 시드니 3대 커피", "hay": "gumption coffee (qvb) food 카페/식당 qvb 인근 · 시드니 3대 커피 16:30", "badges": [], "card_id": "syd-card-3-5", "marker_var": "marker_4ee1e6afe38ddc654e62980c14b5f23e"}, {"day_idx": 3, "idx": 6, "name": "Meriton Suites World Tower (복귀)", "lat": -33.8779, "lon": 151.2068, "when": "19:30", "cat": "hotel", "emoji": "🏨", "stay": "", "memo": "", "hay": "meriton suites world tower (복귀) hotel 베이스 호텔  19:30", "badges": ["복귀"], "card_id": "syd-card-3-6", "marker_var": null}], "layer_var": "feature_group_7a54c7c4092abf85c129d02039b27f68", "is_bm": false, "default_visible": true}, {"name": "Day 4 · 06.04 (목) · 블루 마운틴 당일치기", "color": "#911eb4", "date": "2026-06-04", "total_km": 175.1, "stops": [{"day_idx": 4, "idx": 1, "name": "Central Station", "lat": -33.883, "lon": 151.2071, "when": "07:30", "cat": "transit", "emoji": "🚇", "stay": "머무름 ~2시간 30분", "memo": "택시/도보", "hay": "central station transit 이동/공항·역·페리 택시/도보 07:30", "badges": [], "card_id": "syd-card-4-1", "marker_var": "marker_3ec2c8292c5cfdb4e70cbb3d8e6cea35"}, {"day_idx": 4, "idx": 2, "name": "Katoomba Station", "lat": -33.7113, "lon": 150.312, "when": "10:00", "cat": "transit", "emoji": "🚇", "stay": "", "memo": "버스 686 또는 Hop-on-Hop-off", "hay": "katoomba station transit 이동/공항·역·페리 버스 686 또는 hop-on-hop-off 10:00", "badges": [], "card_id": "syd-card-4-2", "marker_var": "marker_6e04932b173f63fad572ef2c04abf540"}, {"day_idx": 4, "idx": 3, "name": "Echo Point (Three Sisters)", "lat": -33.7325, "lon": 150.3122, "when": "10:00", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~1시간", "memo": "버스 686 또는 Hop-on-Hop-off", "hay": "echo point (three sisters) sight 관광/뷰/이벤트 버스 686 또는 hop-on-hop-off 10:00", "badges": [], "card_id": "syd-card-4-3", "marker_var": "marker_013234f8f2e66455140ffe47405ca492"}, {"day_idx": 4, "idx": 4, "name": "Scenic World", "lat": -33.728, "lon": 150.3014, "when": "11:00", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~4시간", "memo": "Skyway · Cableway · Walkway · Railway", "hay": "scenic world sight 관광/뷰/이벤트 skyway · cableway · walkway · railway 11:00", "badges": [], "card_id": "syd-card-4-4", "marker_var": "marker_9963ffc39f0cc4a90b9c3842f1d9bccd"}, {"day_idx": 4, "idx": 5, "name": "Leura Mall", "lat": -33.7144, "lon": 150.3315, "when": "15:00 (옵션)", "cat": "shop", "emoji": "🛍️", "stay": "머무름 ~3시간", "memo": "예쁜 거리 · 카페", "hay": "leura mall shop 쇼핑/시장 예쁜 거리 · 카페 15:00 (옵션)", "badges": ["옵션"], "card_id": "syd-card-4-5", "marker_var": "marker_c5273b8bb24accf6ff70fc570b9fbe5b"}, {"day_idx": 4, "idx": 6, "name": "Central Station (복귀)", "lat": -33.883, "lon": 151.2071, "when": "18:00", "cat": "transit", "emoji": "🚇", "stay": "머무름 ~1시간", "memo": "", "hay": "central station (복귀) transit 이동/공항·역·페리  18:00", "badges": ["복귀"], "card_id": "syd-card-4-6", "marker_var": "marker_45332e1ae24fe2a9796a675bc10ef9b3"}, {"day_idx": 4, "idx": 7, "name": "Meriton Suites World Tower (복귀)", "lat": -33.8779, "lon": 151.2068, "when": "19:00", "cat": "hotel", "emoji": "🏨", "stay": "", "memo": "긴 하루 — 가벼운 식사 추천", "hay": "meriton suites world tower (복귀) hotel 베이스 호텔 긴 하루 — 가벼운 식사 추천 19:00", "badges": ["복귀"], "card_id": "syd-card-4-7", "marker_var": null}], "layer_var": "feature_group_46d60cd409b94abc37ee3ce88243eb57", "is_bm": true, "default_visible": true}, {"name": "Day 5 · 06.05 (금) · 뉴타운 + 바랑가루 + 옵저보토리 힐", "color": "#f58231", "date": "2026-06-05", "total_km": 7.7, "stops": [{"day_idx": 5, "idx": 1, "name": "Newtown King St", "lat": -33.8978, "lon": 151.1796, "when": "10:00", "cat": "shop", "emoji": "🛍️", "stay": "", "memo": "Quadrangle 건물", "hay": "newtown king st shop 쇼핑/시장 quadrangle 건물 10:00", "badges": [], "card_id": "syd-card-5-1", "marker_var": "marker_9e42118de1955bc96487449f6875b9d2"}, {"day_idx": 5, "idx": 2, "name": "University of Sydney", "lat": -33.8886, "lon": 151.1873, "when": "10:00", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~1시간 30분", "memo": "Quadrangle 건물", "hay": "university of sydney sight 관광/뷰/이벤트 quadrangle 건물 10:00", "badges": [], "card_id": "syd-card-5-2", "marker_var": "marker_ae2908d35b20720788e18fc26af2aee1"}, {"day_idx": 5, "idx": 3, "name": "Elizabeth's Bookshop (Newtown)", "lat": -33.8975, "lon": 151.1798, "when": "11:30", "cat": "shop", "emoji": "🛍️", "stay": "머무름 ~3시간 30분", "memo": "그래피티 거리", "hay": "elizabeth's bookshop (newtown) shop 쇼핑/시장 그래피티 거리 11:30", "badges": [], "card_id": "syd-card-5-3", "marker_var": "marker_514c512c2b2cc94b5d25feb6836c59f8"}, {"day_idx": 5, "idx": 4, "name": "Barangaroo / Wulugul Walk", "lat": -33.8623, "lon": 151.2002, "when": "15:00", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~1시간 40분", "memo": "", "hay": "barangaroo / wulugul walk sight 관광/뷰/이벤트  15:00", "badges": [], "card_id": "syd-card-5-4", "marker_var": "marker_74cf3b8d082147e366c7c652c82de9a6"}, {"day_idx": 5, "idx": 5, "name": "Observatory Hill / Sydney Observatory", "lat": -33.8597, "lon": 151.2049, "when": "16:40 일몰", "cat": "sight", "emoji": "🎯", "stay": "머무름 ~2시간 50분", "memo": "잔디밭 · 일몰 16:54", "hay": "observatory hill / sydney observatory sight 관광/뷰/이벤트 잔디밭 · 일몰 16:54 16:40 일몰", "badges": ["일몰"], "card_id": "syd-card-5-5", "marker_var": "marker_96ef4a32a04deeb1945b70e0d9c1dc83"}, {"day_idx": 5, "idx": 6, "name": "The Rocks", "lat": -33.8597, "lon": 151.2089, "when": "19:30 저녁", "cat": "food", "emoji": "☕", "stay": "", "memo": "", "hay": "the rocks food 카페/식당  19:30 저녁", "badges": [], "card_id": "syd-card-5-6", "marker_var": "marker_5b6db0b60f5db75df23e10fa589da8ab"}], "layer_var": "feature_group_0e04e264fc3efc85875b1f07b7f1d5da", "is_bm": false, "default_visible": true}, {"name": "Day 6 · 06.06 (토) · 패디스 마켓 + Luna Park + 불꽃", "color": "#f032e6", "date": "2026-06-06", "total_km": 7.5, "stops": [{"day_idx": 6, "idx": 1, "name": "Paddy's Markets (Haymarket)", "lat": -33.8801, "lon": 151.2042, "when": "10:00", "cat": "shop", "emoji": "🛍️", "stay": "머무름 ~2시간 30분", "memo": "주말 기념품 쇼핑", "hay": "paddy's markets (haymarket) shop 쇼핑/시장 주말 기념품 쇼핑 10:00", "badges": [], "card_id": "syd-card-6-1", "marker_var": "marker_fc1dcd31ca2661ec9791c3afa3410836"}, {"day_idx": 6, "idx": 2, "name": "Chinatown", "lat": -33.8786, "lon": 151.2046, "when": "12:30", "cat": "food", "emoji": "☕", "stay": "머무름 ~1시간 30분", "memo": "딤섬 추천", "hay": "chinatown food 카페/식당 딤섬 추천 12:30", "badges": [], "card_id": "syd-card-6-2", "marker_var": "marker_3df570bc811d8091483a3c1646f87196"}, {"day_idx": 6, "idx": 3, "name": "Darling Harbour (Vivid Kids)", "lat": -33.8721, "lon": 151.201, "when": "14:00", "cat": "play", "emoji": "🎡", "stay": "머무름 ~1시간 30분", "memo": "Vivid Sydney 종료일 사전 확인 (보통 6월 중순)", "hay": "darling harbour (vivid kids) play 동물원/놀이/야경 vivid sydney 종료일 사전 확인 (보통 6월 중순) 14:00", "badges": ["Vivid"], "card_id": "syd-card-6-3", "marker_var": "marker_7685fdc934e4c66cfc519d87d6ba9cc9"}, {"day_idx": 6, "idx": 4, "name": "Jeffrey Street Wharf (Kirribilli)", "lat": -33.852, "lon": 151.212, "when": "15:30", "cat": "transit", "emoji": "🚇", "stay": "머무름 ~30분", "memo": "페리 또는 트레인 → Milsons Point 도보", "hay": "jeffrey street wharf (kirribilli) transit 이동/공항·역·페리 페리 또는 트레인 → milsons point 도보 15:30", "badges": [], "card_id": "syd-card-6-4", "marker_var": "marker_fb21e3e9296ba5d107a8fc911595d3eb"}, {"day_idx": 6, "idx": 5, "name": "Luna Park (Milsons Point)", "lat": -33.8482, "lon": 151.2102, "when": "16:00", "cat": "play", "emoji": "🎡", "stay": "머무름 ~4시간", "memo": "야경 명소 · 입장 무료, 놀이기구 별도", "hay": "luna park (milsons point) play 동물원/놀이/야경 야경 명소 · 입장 무료, 놀이기구 별도 16:00", "badges": ["야경"], "card_id": "syd-card-6-5", "marker_var": "marker_f56ce5e9000001cf7e9766c8dd36f600"}, {"day_idx": 6, "idx": 6, "name": "Darling Harbour 불꽃", "lat": -33.8721, "lon": 151.201, "when": "20:00", "cat": "play", "emoji": "🎡", "stay": "머무름 ~1시간", "memo": "보통 매주 토 20:30 · 일정 사전 확인", "hay": "darling harbour 불꽃 play 동물원/놀이/야경 보통 매주 토 20:30 · 일정 사전 확인 20:00", "badges": ["불꽃"], "card_id": "syd-card-6-6", "marker_var": "marker_1447edefd00bea0b942d4d1d0de8bf8b"}, {"day_idx": 6, "idx": 7, "name": "Meriton Suites World Tower (복귀)", "lat": -33.8779, "lon": 151.2068, "when": "21:00", "cat": "hotel", "emoji": "🏨", "stay": "", "memo": "", "hay": "meriton suites world tower (복귀) hotel 베이스 호텔  21:00", "badges": ["복귀"], "card_id": "syd-card-6-7", "marker_var": null}], "layer_var": "feature_group_04354730b81cc7afb3beb2ff283770b0", "is_bm": false, "default_visible": true}];
+      var SYD_BOUNDS = {
+        syd: [[-33.9399, 151.1753], [-33.843, 151.2412]],
+        bm:  [[-33.8779, 150.3014], [-33.7113, 151.2068]],
+        all: [[-33.9399, 150.3014], [-33.7113, 151.2412]]
+      };
+      function sydZoom(key) {
+        var b = SYD_BOUNDS[key];
+        if (!b) return;
+        if (key === 'bm' || key === 'all') {
+          // 블루마운틴 영역에 마커가 있는 Day 는 강제 표시
+          SYD_DAYS.forEach(function(d) {
+            if (d.is_bm && d.layer_var && window[d.layer_var]) {
+              if (!map_577bc5c034b5c13fd1f37345151f8702.hasLayer(window[d.layer_var])) window[d.layer_var].addTo(map_577bc5c034b5c13fd1f37345151f8702);
+            }
+          });
+        }
+        map_577bc5c034b5c13fd1f37345151f8702.fitBounds(b, {padding: [40, 40]});
+      }
+      function sydFlyTo(lat, lon) {
+        map_577bc5c034b5c13fd1f37345151f8702.flyTo([lat, lon], 17, {duration: 0.6});
+      }
+      function sydMarkerEl(varName) {
+        var mk = window[varName];
+        return (mk && mk.getElement) ? mk.getElement() : null;
+      }
+      function sydHoverMarker(varName, on) {
+        var el = sydMarkerEl(varName);
+        if (!el) return;
+        var bubble = el.querySelector('.syd-mk-bubble') || el.firstElementChild || el;
+        bubble.classList.toggle('syd-mk-pulse', !!on);
+        if (on && el.style) el.style.zIndex = 10000;
+      }
+      function sydActivateCard(cardId, scroll) {
+        document.querySelectorAll('.stop-card.syd-active').forEach(function(c) {
+          c.classList.remove('syd-active');
+        });
+        var card = document.getElementById(cardId);
+        if (!card) return;
+        card.classList.add('syd-active');
+        if (scroll) card.scrollIntoView({behavior: 'smooth', block: 'center'});
+      }
+      function sydEscapeXml(s) {
+        return (s == null ? '' : String(s)).replace(/[<>&"']/g, function(c) {
+          return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c];
+        });
+      }
+      function sydDownloadGpx() {
+        var parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                     '<gpx version="1.1" creator="Sydney Itinerary Map" xmlns="http://www.topografix.com/GPX/1/1">',
+                     '<metadata><name>Sydney 5박 6일 동선</name></metadata>'];
+        parts.push('<wpt lat="-33.8779" lon="151.2068"><name>Meriton Suites World Tower</name><desc>베이스 호텔 · 95 Liverpool St</desc></wpt>');
+        SYD_DAYS.forEach(function(d) {
+          parts.push('<trk><name>' + sydEscapeXml(d.name) + '</name><trkseg>');
+          d.stops.forEach(function(s) {
+            parts.push('<trkpt lat="' + s.lat + '" lon="' + s.lon + '">');
+            parts.push('<name>' + sydEscapeXml(s.idx + '. ' + s.name) + '</name>');
+            parts.push('<desc>' + sydEscapeXml(s.when + (s.memo ? ' · ' + s.memo : '')) + '</desc>');
+            parts.push('</trkpt>');
+          });
+          parts.push('</trkseg></trk>');
+        });
+        parts.push('</gpx>');
+        var blob = new Blob([parts.join('\n')], {type: 'application/gpx+xml;charset=utf-8'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'sydney-itinerary.gpx';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+      function sydSearch(q) {
+        q = (q || '').toLowerCase().trim();
+        document.querySelectorAll('.day-section').forEach(function(sec) {
+          var any = false;
+          sec.querySelectorAll('.stop-card').forEach(function(card) {
+            var hay = card.dataset.hay || (card.dataset.name + ' ' + card.dataset.cat).toLowerCase();
+            var match = !q || hay.indexOf(q) >= 0;
+            card.style.display = match ? '' : 'none';
+            if (match) any = true;
+            var mv = card.dataset.marker;
+            if (mv) {
+              var el = sydMarkerEl(mv);
+              if (el) {
+                el.style.opacity = match ? '1' : '0.15';
+                el.style.pointerEvents = match ? '' : 'none';
+              }
+            }
+          });
+          sec.style.display = any ? '' : 'none';
+        });
+      }
+      (function renderList() {
+        var el = document.getElementById('syd-list');
+        if (!el) return;
+        SYD_DAYS.forEach(function(d) {
+          var sec = document.createElement('section');
+          sec.className = 'day-section';
+          sec.style.color = d.color;
+          var h = document.createElement('div');
+          h.className = 'day-header';
+          var hint = d.is_bm
+            ? ' <span style="font-size:10px;color:#911eb4;">· "블루마운틴" 버튼으로 줌</span>'
+            : '';
+          var badge = '';
+          if (d.date) {
+            var today = new Date(); today.setHours(0,0,0,0);
+            var trip = new Date(d.date + 'T00:00:00');
+            var diff = Math.round((trip - today) / 86400000);
+            if (diff === 0) badge = '<span class="day-badge today">오늘</span>';
+            else if (diff > 0) badge = '<span class="day-badge">D-' + diff + '</span>';
+            else badge = '<span class="day-badge past">D+' + (-diff) + '</span>';
+          }
+          h.innerHTML = '<span>' + d.name + badge + hint + '</span><span class="km">' + d.total_km + ' km</span>';
+          sec.appendChild(h);
+          d.stops.forEach(function(s) {
+            var card = document.createElement('div');
+            card.className = 'stop-card';
+            card.id = s.card_id;
+            card.dataset.name = s.name;
+            card.dataset.cat = s.cat;
+            card.dataset.hay = s.hay || '';
+            if (s.marker_var) card.dataset.marker = s.marker_var;
+            card.onclick = function() {
+              sydFlyTo(s.lat, s.lon);
+              sydActivateCard(s.card_id, false);
+            };
+            card.onmouseenter = function() { if (s.marker_var) sydHoverMarker(s.marker_var, true); };
+            card.onmouseleave = function() { if (s.marker_var) sydHoverMarker(s.marker_var, false); };
+            var badgesHtml = (s.badges || []).map(function(b) {
+              return '<span class="stop-mini-badge">' + b + '</span>';
+            }).join('');
+            card.innerHTML =
+              '<div class="stop-num" style="background:' + d.color + '">' + s.idx + '</div>' +
+              '<div class="stop-body">' +
+                '<div class="stop-name">' + s.emoji + ' ' + s.name + badgesHtml + '</div>' +
+                '<div class="stop-when">' + s.when + (s.stay ? '  ·  ' + s.stay : '') + '</div>' +
+                (s.memo ? '<div class="stop-memo" style="color:' + d.color + ';"><span style="color:#555;">📝 ' + s.memo + '</span></div>' : '') +
+              '</div>';
+            sec.appendChild(card);
+          });
+          el.appendChild(sec);
+        });
+      })();
+      window.addEventListener('load', function() {
+        var mapEl = document.getElementById('map_577bc5c034b5c13fd1f37345151f8702');
+        if (mapEl) {
+          mapEl.classList.add('folium-map');
+          setTimeout(function() { map_577bc5c034b5c13fd1f37345151f8702.invalidateSize(); }, 300);
+        }
+        // 마커 → 카드 양방향: 클릭 시 패널 카드 활성화
+        SYD_DAYS.forEach(function(d) {
+          d.stops.forEach(function(s) {
+            if (!s.marker_var) return;
+            var mk = window[s.marker_var];
+            if (mk && mk.on) {
+              mk.on('click', function() { sydActivateCard(s.card_id, true); });
+            }
+          });
+        });
+        // 블루마운틴 Day 가 LayerControl 로 켜지면 자동으로 해당 영역에 fitBounds
+        map_577bc5c034b5c13fd1f37345151f8702.on('overlayadd', function(e) {
+          SYD_DAYS.forEach(function(d) {
+            if (d.is_bm && d.layer_var && window[d.layer_var] === e.layer && SYD_BOUNDS.bm) {
+              map_577bc5c034b5c13fd1f37345151f8702.fitBounds(SYD_BOUNDS.bm, {padding: [40, 40]});
+            }
+          });
+        });
+        // Dark/Light 베이스 타일 변경에 패널 테마 동기
+        map_577bc5c034b5c13fd1f37345151f8702.on('baselayerchange', function(e) {
+          document.body.classList.toggle('syd-dark', e.name === 'Dark');
+        });
+      });
+    </script>
+    
+    
+    <div style="position:fixed; bottom:18px; left:354px; z-index:9000;
+                background:rgba(255,255,255,0.95); padding:8px 12px;
+                border:1px solid #d0d0d0; border-radius:6px;
+                font-family:-apple-system,sans-serif; max-width:540px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.12); line-height:1.7;">
+      <span style='display:inline-flex;align-items:center;margin-right:10px;font-size:11px;color:#555;'>🚇&nbsp;이동/공항·역·페리</span><span style='display:inline-flex;align-items:center;margin-right:10px;font-size:11px;color:#555;'>🎯&nbsp;관광/뷰/이벤트</span><span style='display:inline-flex;align-items:center;margin-right:10px;font-size:11px;color:#555;'>🛍️&nbsp;쇼핑/시장</span><span style='display:inline-flex;align-items:center;margin-right:10px;font-size:11px;color:#555;'>☕&nbsp;카페/식당</span><span style='display:inline-flex;align-items:center;margin-right:10px;font-size:11px;color:#555;'>🎡&nbsp;동물원/놀이/야경</span>
+      <span style='display:inline-flex;align-items:center;margin-right:10px;font-size:11px;color:#555;'>
+        <span style='display:inline-block;width:22px;border-top:3px solid #555;margin-right:4px;'></span>도보</span>
+      <span style='display:inline-flex;align-items:center;font-size:11px;color:#555;'>
+        <span style='display:inline-block;width:22px;border-top:3px dashed #555;margin-right:4px;'></span>대중교통/장거리</span>
+    </div>
+    
+    
+            <div class="folium-map" id="map_577bc5c034b5c13fd1f37345151f8702" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_577bc5c034b5c13fd1f37345151f8702 = L.map(
+                "map_577bc5c034b5c13fd1f37345151f8702",
+                {
+                    center: [-33.87, 151.21],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 14,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+            L.control.scale().addTo(map_577bc5c034b5c13fd1f37345151f8702);
+
+            
+
+        
+    
+            var tile_layer_e5adad7ad7b19ae9e39e3f52f86543cf = L.tileLayer(
+                "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 20,
+  "maxNativeZoom": 20,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"https://carto.com/attributions\"\u003eCARTO\u003c/a\u003e",
+  "subdomains": "abcd",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_e5adad7ad7b19ae9e39e3f52f86543cf.addTo(map_577bc5c034b5c13fd1f37345151f8702);
+        
+    
+            var tile_layer_5714c50b6689cb15e68a149f6d9ff6cc = L.tileLayer(
+                "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 20,
+  "maxNativeZoom": 20,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"https://carto.com/attributions\"\u003eCARTO\u003c/a\u003e",
+  "subdomains": "abcd",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            var feature_group_13fd0a580aa4f35040b1cffa244790cd = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_cbed6a4fb60593a44df0e261fe260a34 = L.polyline(
+                [[-33.9399, 151.1753], [-33.8779, 151.2068]],
+                {"bubblingMouseEvents": true, "color": "#e6194B", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#e6194B", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            poly_line_cbed6a4fb60593a44df0e261fe260a34.bindTooltip(
+                `<div>
+                     Sydney Airport T1 → Meriton Suites World Tower (짐 보관)  ·  7.5 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2bd30a6cba571c90ecd367dd28257d37 = L.polyline(
+                [[-33.8779, 151.2068], [-33.8719, 151.2069]],
+                {"bubblingMouseEvents": true, "color": "#e6194B", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#e6194B", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            poly_line_2bd30a6cba571c90ecd367dd28257d37.bindTooltip(
+                `<div>
+                     Meriton Suites World Tower (짐 보관) → Queen Victoria Building  ·  0.7 km · 도보 ~9분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2851d7726da89dae95ae23d023d5b309 = L.polyline(
+                [[-33.8719, 151.2069], [-33.8718, 151.2129]],
+                {"bubblingMouseEvents": true, "color": "#e6194B", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#e6194B", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            poly_line_2851d7726da89dae95ae23d023d5b309.bindTooltip(
+                `<div>
+                     Queen Victoria Building → Hyde Park / St Mary's Cathedral  ·  0.6 km · 도보 ~7분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2d643a8e41d8a56d1390f3cfc7909870 = L.polyline(
+                [[-33.8718, 151.2129], [-33.8755, 151.2014]],
+                {"bubblingMouseEvents": true, "color": "#e6194B", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#e6194B", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            poly_line_2d643a8e41d8a56d1390f3cfc7909870.bindTooltip(
+                `<div>
+                     Hyde Park / St Mary's Cathedral → Darling Harbour / Tumbalong Playground  ·  1.1 km · 도보 ~15분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_249b6e4266bafb6114012115b3607901 = L.polyline(
+                [[-33.8755, 151.2014], [-33.8779, 151.2068]],
+                {"bubblingMouseEvents": true, "color": "#e6194B", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#e6194B", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            poly_line_249b6e4266bafb6114012115b3607901.bindTooltip(
+                `<div>
+                     Darling Harbour / Tumbalong Playground → Meriton Suites World Tower (복귀)  ·  0.6 km · 도보 ~8분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_35971f994a7bcd6863b065e902e149ec = L.marker(
+                [-33.9399, 151.1753],
+                {
+}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            var div_icon_f0500e29895b61ef052e1c3846c33afc = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#e6194B;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\ude87\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#e6194B;border:1.5px solid #e6194B;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e1\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_66ab295dd3eea8cc744865038a8efdb9 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_ed58fcaae6a81d5c82a495a79945b301 = $(`<div id="html_ed58fcaae6a81d5c82a495a79945b301" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>1. Sydney Airport T1</div><div style='color:#666;margin-bottom:4px;'>06:20 도착  ·  이동/공항·역·페리</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간 40분</div><div style='background:#f6f4ff;border-left:3px solid #e6194B;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 입국 수속 1~1.5시간 예상</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 1 · 06.01 (월) · 도착 + 시티 적응</div><a href='https://www.google.com/maps/search/?api=1&query=Sydney+Airport+T1+%40-33.9399%2C151.1753' target='_blank' style='display:inline-block;background:#e6194B;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_66ab295dd3eea8cc744865038a8efdb9.setContent(html_ed58fcaae6a81d5c82a495a79945b301);
+            
+        
+
+        marker_35971f994a7bcd6863b065e902e149ec.bindPopup(popup_66ab295dd3eea8cc744865038a8efdb9)
+        ;
+
+        
+    
+    
+            marker_35971f994a7bcd6863b065e902e149ec.bindTooltip(
+                `<div>
+                     1. Sydney Airport T1  ·  06:20 도착
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_35971f994a7bcd6863b065e902e149ec.setIcon(div_icon_f0500e29895b61ef052e1c3846c33afc);
+            
+    
+            var marker_4e28ea447e462489642b9f928804e4d2 = L.marker(
+                [-33.8719, 151.2069],
+                {
+}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            var div_icon_b4a7b2be3c1122cbf0d896dc77e03347 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#e6194B;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\udecd\ufe0f\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#e6194B;border:1.5px solid #e6194B;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e3\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_855d97e5704b245bbfb09f4178b707ed = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_bff7592f17b3249ffa94439eee2a0846 = $(`<div id="html_bff7592f17b3249ffa94439eee2a0846" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>3. Queen Victoria Building</div><div style='color:#666;margin-bottom:4px;'>10:30  ·  쇼핑/시장</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간</div><div style='background:#f6f4ff;border-left:3px solid #e6194B;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 호텔 도보 3분 · 실내 따뜻</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 1 · 06.01 (월) · 도착 + 시티 적응</div><a href='https://www.google.com/maps/search/?api=1&query=Queen+Victoria+Building+%40-33.8719%2C151.2069' target='_blank' style='display:inline-block;background:#e6194B;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_855d97e5704b245bbfb09f4178b707ed.setContent(html_bff7592f17b3249ffa94439eee2a0846);
+            
+        
+
+        marker_4e28ea447e462489642b9f928804e4d2.bindPopup(popup_855d97e5704b245bbfb09f4178b707ed)
+        ;
+
+        
+    
+    
+            marker_4e28ea447e462489642b9f928804e4d2.bindTooltip(
+                `<div>
+                     3. Queen Victoria Building  ·  10:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_4e28ea447e462489642b9f928804e4d2.setIcon(div_icon_b4a7b2be3c1122cbf0d896dc77e03347);
+            
+    
+            var marker_f365a3b9b95d736c1bc735a50b1804b7 = L.marker(
+                [-33.8718, 151.2129],
+                {
+}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            var div_icon_eecc388839875fee7eed184313b9410e = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#e6194B;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#e6194B;border:1.5px solid #e6194B;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e4\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_72deb18c2037e7107bf33c9df50c0770 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_23ecf15ea1e5ed8724b73e2061eeaa1c = $(`<div id="html_23ecf15ea1e5ed8724b73e2061eeaa1c" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>4. Hyde Park / St Mary's Cathedral</div><div style='color:#666;margin-bottom:4px;'>11:30  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~5시간</div><div style='background:#f6f4ff;border-left:3px solid #e6194B;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 QVB → 도보 7분</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 1 · 06.01 (월) · 도착 + 시티 적응</div><a href='https://www.google.com/maps/search/?api=1&query=Hyde+Park+%2F+St+Mary%27s+Cathedral+%40-33.8718%2C151.2129' target='_blank' style='display:inline-block;background:#e6194B;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_72deb18c2037e7107bf33c9df50c0770.setContent(html_23ecf15ea1e5ed8724b73e2061eeaa1c);
+            
+        
+
+        marker_f365a3b9b95d736c1bc735a50b1804b7.bindPopup(popup_72deb18c2037e7107bf33c9df50c0770)
+        ;
+
+        
+    
+    
+            marker_f365a3b9b95d736c1bc735a50b1804b7.bindTooltip(
+                `<div>
+                     4. Hyde Park / St Mary's Cathedral  ·  11:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_f365a3b9b95d736c1bc735a50b1804b7.setIcon(div_icon_eecc388839875fee7eed184313b9410e);
+            
+    
+            var marker_384948bbd1e3358a17da6c8e7f034448 = L.marker(
+                [-33.8755, 151.2014],
+                {
+}
+            ).addTo(feature_group_13fd0a580aa4f35040b1cffa244790cd);
+        
+    
+            var div_icon_3d6bb24dccb395e2fd75f8917bfc52a9 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#e6194B;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfa1\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#e6194B;border:1.5px solid #e6194B;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e5\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_00453b616f7c1148b53df6c546420261 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_67cab9dff92b0fef8b48978fbef552d9 = $(`<div id="html_67cab9dff92b0fef8b48978fbef552d9" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>5. Darling Harbour / Tumbalong Playground</div><div style='color:#666;margin-bottom:4px;'>16:30  ·  동물원/놀이/야경</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~3시간</div><div style='background:#f6f4ff;border-left:3px solid #e6194B;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 호텔 도보 5분 · 첫째 놀이</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 1 · 06.01 (월) · 도착 + 시티 적응</div><a href='https://www.google.com/maps/search/?api=1&query=Darling+Harbour+%2F+Tumbalong+Playground+%40-33.8755%2C151.2014' target='_blank' style='display:inline-block;background:#e6194B;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_00453b616f7c1148b53df6c546420261.setContent(html_67cab9dff92b0fef8b48978fbef552d9);
+            
+        
+
+        marker_384948bbd1e3358a17da6c8e7f034448.bindPopup(popup_00453b616f7c1148b53df6c546420261)
+        ;
+
+        
+    
+    
+            marker_384948bbd1e3358a17da6c8e7f034448.bindTooltip(
+                `<div>
+                     5. Darling Harbour / Tumbalong Playground  ·  16:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_384948bbd1e3358a17da6c8e7f034448.setIcon(div_icon_3d6bb24dccb395e2fd75f8917bfc52a9);
+            
+    
+            feature_group_13fd0a580aa4f35040b1cffa244790cd.addTo(map_577bc5c034b5c13fd1f37345151f8702);
+        
+    
+            var feature_group_bed8ea567580ef357a7e5138d46e17f8 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_ed20b858608eba541717d530793f3f05 = L.polyline(
+                [[-33.8843, 151.2106], [-33.8614, 151.2108]],
+                {"bubblingMouseEvents": true, "color": "#4363d8", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#4363d8", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            poly_line_ed20b858608eba541717d530793f3f05.bindTooltip(
+                `<div>
+                     Single O Coffee (Surry Hills) → Circular Quay  ·  2.5 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_714b500809d7a5a3b43002ede3b281c1 = L.polyline(
+                [[-33.8614, 151.2108], [-33.8568, 151.2153]],
+                {"bubblingMouseEvents": true, "color": "#4363d8", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#4363d8", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            poly_line_714b500809d7a5a3b43002ede3b281c1.bindTooltip(
+                `<div>
+                     Circular Quay → Sydney Opera House  ·  0.7 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_6b76db8d9a8041bc0679110dcc202d38 = L.polyline(
+                [[-33.8568, 151.2153], [-33.8642, 151.2166]],
+                {"bubblingMouseEvents": true, "color": "#4363d8", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#4363d8", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            poly_line_6b76db8d9a8041bc0679110dcc202d38.bindTooltip(
+                `<div>
+                     Sydney Opera House → Royal Botanic Garden  ·  0.8 km · 도보 ~11분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f2e2d49e729f984db195f61c77729ff3 = L.polyline(
+                [[-33.8642, 151.2166], [-33.8597, 151.2226]],
+                {"bubblingMouseEvents": true, "color": "#4363d8", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#4363d8", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            poly_line_f2e2d49e729f984db195f61c77729ff3.bindTooltip(
+                `<div>
+                     Royal Botanic Garden → Mrs Macquaries Point  ·  0.7 km · 도보 ~10분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_a9cb8862583930e5c94a7cbe6e6b2c9d = L.polyline(
+                [[-33.8597, 151.2226], [-33.8779, 151.2068]],
+                {"bubblingMouseEvents": true, "color": "#4363d8", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#4363d8", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            poly_line_a9cb8862583930e5c94a7cbe6e6b2c9d.bindTooltip(
+                `<div>
+                     Mrs Macquaries Point → Meriton Suites World Tower (복귀)  ·  2.5 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_0c6cae92d2b3ce3864277870c7e34616 = L.marker(
+                [-33.8843, 151.2106],
+                {
+}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            var div_icon_0fb48b64f3ccd23e6dbcc63520767c08 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#4363d8;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\u2615\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#4363d8;border:1.5px solid #4363d8;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e1\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_fcf1ee4506ac4a34154a4bb6a138a8b7 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_e4a1138eb82a7722107341260f93b978 = $(`<div id="html_e4a1138eb82a7722107341260f93b978" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>1. Single O Coffee (Surry Hills)</div><div style='color:#666;margin-bottom:4px;'>09:00  ·  카페/식당</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간 30분</div><div style='background:#f6f4ff;border-left:3px solid #4363d8;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 시드니 3대 커피 — 호텔에서 도보/택시 10분</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 2 · 06.02 (화) · Circular Quay + 식물원 일몰</div><a href='https://www.google.com/maps/search/?api=1&query=Single+O+Coffee+%28Surry+Hills%29+%40-33.8843%2C151.2106' target='_blank' style='display:inline-block;background:#4363d8;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_fcf1ee4506ac4a34154a4bb6a138a8b7.setContent(html_e4a1138eb82a7722107341260f93b978);
+            
+        
+
+        marker_0c6cae92d2b3ce3864277870c7e34616.bindPopup(popup_fcf1ee4506ac4a34154a4bb6a138a8b7)
+        ;
+
+        
+    
+    
+            marker_0c6cae92d2b3ce3864277870c7e34616.bindTooltip(
+                `<div>
+                     1. Single O Coffee (Surry Hills)  ·  09:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_0c6cae92d2b3ce3864277870c7e34616.setIcon(div_icon_0fb48b64f3ccd23e6dbcc63520767c08);
+            
+    
+            var marker_80bb1713bccb610c57b41ed910778e49 = L.marker(
+                [-33.861700000000006, 151.2108],
+                {
+}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            var div_icon_4b1b6f5426777be64e513bdbd212e340 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#4363d8;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\ude87\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#4363d8;border:1.5px solid #4363d8;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e2\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_08f9d70163cdc5f071d96ff7f7592811 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_45ac45d6e1e429c0ad4b762a2702d638 = $(`<div id="html_45ac45d6e1e429c0ad4b762a2702d638" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>2. Circular Quay</div><div style='color:#666;margin-bottom:4px;'>10:30  ·  이동/공항·역·페리</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~15분</div><div style='background:#f6f4ff;border-left:3px solid #4363d8;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 라이트레일 또는 페리</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 2 · 06.02 (화) · Circular Quay + 식물원 일몰</div><a href='https://www.google.com/maps/search/?api=1&query=Circular+Quay+%40-33.8614%2C151.2108' target='_blank' style='display:inline-block;background:#4363d8;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_08f9d70163cdc5f071d96ff7f7592811.setContent(html_45ac45d6e1e429c0ad4b762a2702d638);
+            
+        
+
+        marker_80bb1713bccb610c57b41ed910778e49.bindPopup(popup_08f9d70163cdc5f071d96ff7f7592811)
+        ;
+
+        
+    
+    
+            marker_80bb1713bccb610c57b41ed910778e49.bindTooltip(
+                `<div>
+                     2. Circular Quay  ·  10:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_80bb1713bccb610c57b41ed910778e49.setIcon(div_icon_4b1b6f5426777be64e513bdbd212e340);
+            
+    
+            var marker_74fa03f405b6b9f0a1721aaddc564885 = L.marker(
+                [-33.8568, 151.2153],
+                {
+}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            var div_icon_d7cbd0adaf7e7beeae9abcf4d8da3110 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#4363d8;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#4363d8;border:1.5px solid #4363d8;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e3\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_d3f92d97e212c3b9ae182fe9a2689132 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_13ab8971740670503567e152673e4c47 = $(`<div id="html_13ab8971740670503567e152673e4c47" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>3. Sydney Opera House</div><div style='color:#666;margin-bottom:4px;'>10:45 외관  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~45분</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 2 · 06.02 (화) · Circular Quay + 식물원 일몰</div><a href='https://www.google.com/maps/search/?api=1&query=Sydney+Opera+House+%40-33.8568%2C151.2153' target='_blank' style='display:inline-block;background:#4363d8;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_d3f92d97e212c3b9ae182fe9a2689132.setContent(html_13ab8971740670503567e152673e4c47);
+            
+        
+
+        marker_74fa03f405b6b9f0a1721aaddc564885.bindPopup(popup_d3f92d97e212c3b9ae182fe9a2689132)
+        ;
+
+        
+    
+    
+            marker_74fa03f405b6b9f0a1721aaddc564885.bindTooltip(
+                `<div>
+                     3. Sydney Opera House  ·  10:45 외관
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_74fa03f405b6b9f0a1721aaddc564885.setIcon(div_icon_d7cbd0adaf7e7beeae9abcf4d8da3110);
+            
+    
+            var marker_7954735e4ba9258a9e115a7880452865 = L.marker(
+                [-33.8642, 151.2166],
+                {
+}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            var div_icon_fc465741595074a6fc8d388d1f5bf1cc = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#4363d8;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#4363d8;border:1.5px solid #4363d8;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e4\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_d65fe8684f60ce8c6dbe1f9c30889f8c = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_da540b2dc3379d8d5b120d39f7f111d7 = $(`<div id="html_da540b2dc3379d8d5b120d39f7f111d7" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>4. Royal Botanic Garden</div><div style='color:#666;margin-bottom:4px;'>11:30  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~5시간</div><div style='background:#f6f4ff;border-left:3px solid #4363d8;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 유모차 OK · 정원 카페</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 2 · 06.02 (화) · Circular Quay + 식물원 일몰</div><a href='https://www.google.com/maps/search/?api=1&query=Royal+Botanic+Garden+%40-33.8642%2C151.2166' target='_blank' style='display:inline-block;background:#4363d8;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_d65fe8684f60ce8c6dbe1f9c30889f8c.setContent(html_da540b2dc3379d8d5b120d39f7f111d7);
+            
+        
+
+        marker_7954735e4ba9258a9e115a7880452865.bindPopup(popup_d65fe8684f60ce8c6dbe1f9c30889f8c)
+        ;
+
+        
+    
+    
+            marker_7954735e4ba9258a9e115a7880452865.bindTooltip(
+                `<div>
+                     4. Royal Botanic Garden  ·  11:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_7954735e4ba9258a9e115a7880452865.setIcon(div_icon_fc465741595074a6fc8d388d1f5bf1cc);
+            
+    
+            var marker_1e51f1c41930d2d1080e58f0a3811e43 = L.marker(
+                [-33.8597, 151.2226],
+                {
+}
+            ).addTo(feature_group_bed8ea567580ef357a7e5138d46e17f8);
+        
+    
+            var div_icon_edd51074737fd0b0da9eb9243f377cc8 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#4363d8;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#4363d8;border:1.5px solid #4363d8;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e5\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_afca3cd95e1e649c02b0c1710454f5d1 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_d614b4ed2c5884e99b5ccbc32645ff01 = $(`<div id="html_d614b4ed2c5884e99b5ccbc32645ff01" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>5. Mrs Macquaries Point</div><div style='color:#666;margin-bottom:4px;'>16:30 일몰  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~3시간</div><div style='background:#f6f4ff;border-left:3px solid #4363d8;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 일몰 16:54 — 30분 전 도착 권장</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 2 · 06.02 (화) · Circular Quay + 식물원 일몰</div><a href='https://www.google.com/maps/search/?api=1&query=Mrs+Macquaries+Point+%40-33.8597%2C151.2226' target='_blank' style='display:inline-block;background:#4363d8;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_afca3cd95e1e649c02b0c1710454f5d1.setContent(html_d614b4ed2c5884e99b5ccbc32645ff01);
+            
+        
+
+        marker_1e51f1c41930d2d1080e58f0a3811e43.bindPopup(popup_afca3cd95e1e649c02b0c1710454f5d1)
+        ;
+
+        
+    
+    
+            marker_1e51f1c41930d2d1080e58f0a3811e43.bindTooltip(
+                `<div>
+                     5. Mrs Macquaries Point  ·  16:30 일몰
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_1e51f1c41930d2d1080e58f0a3811e43.setIcon(div_icon_edd51074737fd0b0da9eb9243f377cc8);
+            
+    
+            feature_group_bed8ea567580ef357a7e5138d46e17f8.addTo(map_577bc5c034b5c13fd1f37345151f8702);
+        
+    
+            var feature_group_7a54c7c4092abf85c129d02039b27f68 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_41b9d05b59e7582cf7d2b915cbc8b298 = L.polyline(
+                [[-33.8614, 151.2108], [-33.843, 151.2412]],
+                {"bubblingMouseEvents": true, "color": "#3cb44b", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#3cb44b", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            poly_line_41b9d05b59e7582cf7d2b915cbc8b298.bindTooltip(
+                `<div>
+                     Circular Quay (페리 Wharf 4) → Taronga Zoo  ·  3.5 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f19fefaf7c0516dee2b0f336782d5568 = L.polyline(
+                [[-33.843, 151.2412], [-33.8704, 151.2087]],
+                {"bubblingMouseEvents": true, "color": "#3cb44b", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#3cb44b", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            poly_line_f19fefaf7c0516dee2b0f336782d5568.bindTooltip(
+                `<div>
+                     Taronga Zoo → Pitt St Mall — AG LEGO Store  ·  4.3 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_fce2fc8a895f9891c8a43845e44641ac = L.polyline(
+                [[-33.8704, 151.2087], [-33.8712, 151.2078]],
+                {"bubblingMouseEvents": true, "color": "#3cb44b", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#3cb44b", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            poly_line_fce2fc8a895f9891c8a43845e44641ac.bindTooltip(
+                `<div>
+                     Pitt St Mall — AG LEGO Store → Strand Arcade — Haigh's  ·  0.1 km · 도보 ~2분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_637690d772f2f0e4c4a108f5006fd128 = L.polyline(
+                [[-33.8712, 151.2078], [-33.8716, 151.2061]],
+                {"bubblingMouseEvents": true, "color": "#3cb44b", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#3cb44b", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            poly_line_637690d772f2f0e4c4a108f5006fd128.bindTooltip(
+                `<div>
+                     Strand Arcade — Haigh's → Gumption Coffee (QVB)  ·  0.2 km · 도보 ~2분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_75d6dfb0b93f11b3f6cdfeaa98f00f08 = L.polyline(
+                [[-33.8716, 151.2061], [-33.8779, 151.2068]],
+                {"bubblingMouseEvents": true, "color": "#3cb44b", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#3cb44b", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            poly_line_75d6dfb0b93f11b3f6cdfeaa98f00f08.bindTooltip(
+                `<div>
+                     Gumption Coffee (QVB) → Meriton Suites World Tower (복귀)  ·  0.7 km · 도보 ~9분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_e916bbf12304403af6cead7020cbc98c = L.marker(
+                [-33.8611, 151.2108],
+                {
+}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            var div_icon_07f7756cb7c202f0f8718566562d0303 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#3cb44b;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\ude87\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#3cb44b;border:1.5px solid #3cb44b;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e1\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_1701ab054923535c53ce4fc23f7f44e1 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_6a1263ed3dc24c84ad5dcad03932cd33 = $(`<div id="html_6a1263ed3dc24c84ad5dcad03932cd33" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>1. Circular Quay (페리 Wharf 4)</div><div style='color:#666;margin-bottom:4px;'>09:30  ·  이동/공항·역·페리</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~30분</div><div style='background:#f6f4ff;border-left:3px solid #3cb44b;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 약 12분 · Opal Card</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 3 · 06.03 (수) · 타롱가 동물원 + 시티</div><a href='https://www.google.com/maps/search/?api=1&query=Circular+Quay+%28%ED%8E%98%EB%A6%AC+Wharf+4%29+%40-33.8614%2C151.2108' target='_blank' style='display:inline-block;background:#3cb44b;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_1701ab054923535c53ce4fc23f7f44e1.setContent(html_6a1263ed3dc24c84ad5dcad03932cd33);
+            
+        
+
+        marker_e916bbf12304403af6cead7020cbc98c.bindPopup(popup_1701ab054923535c53ce4fc23f7f44e1)
+        ;
+
+        
+    
+    
+            marker_e916bbf12304403af6cead7020cbc98c.bindTooltip(
+                `<div>
+                     1. Circular Quay (페리 Wharf 4)  ·  09:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_e916bbf12304403af6cead7020cbc98c.setIcon(div_icon_07f7756cb7c202f0f8718566562d0303);
+            
+    
+            var marker_21aab19ffc145423b41729319306d4e6 = L.marker(
+                [-33.843, 151.2412],
+                {
+}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            var div_icon_ae9872133c70a2ee8f37140303ff54b0 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#3cb44b;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfa1\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#3cb44b;border:1.5px solid #3cb44b;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e2\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_1d0f5dfe92d66047fe0bcd9f2845f636 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_5c5bc712f1853922b725cdc668cba370 = $(`<div id="html_5c5bc712f1853922b725cdc668cba370" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>2. Taronga Zoo</div><div style='color:#666;margin-bottom:4px;'>10:00  ·  동물원/놀이/야경</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~5시간</div><div style='background:#f6f4ff;border-left:3px solid #3cb44b;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 입구에서 Sky Safari 곤돌라 → 위에서 아래로 관람 추천</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 3 · 06.03 (수) · 타롱가 동물원 + 시티</div><a href='https://www.google.com/maps/search/?api=1&query=Taronga+Zoo+%40-33.843%2C151.2412' target='_blank' style='display:inline-block;background:#3cb44b;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_1d0f5dfe92d66047fe0bcd9f2845f636.setContent(html_5c5bc712f1853922b725cdc668cba370);
+            
+        
+
+        marker_21aab19ffc145423b41729319306d4e6.bindPopup(popup_1d0f5dfe92d66047fe0bcd9f2845f636)
+        ;
+
+        
+    
+    
+            marker_21aab19ffc145423b41729319306d4e6.bindTooltip(
+                `<div>
+                     2. Taronga Zoo  ·  10:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_21aab19ffc145423b41729319306d4e6.setIcon(div_icon_ae9872133c70a2ee8f37140303ff54b0);
+            
+    
+            var marker_083fe02a5ed0edf9206ad571564b394b = L.marker(
+                [-33.8704, 151.2087],
+                {
+}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            var div_icon_19d17e29658c78ada68500e0f1986fae = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#3cb44b;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\udecd\ufe0f\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#3cb44b;border:1.5px solid #3cb44b;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e3\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_342830abee23191b0a23f7660b3d5078 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_df8b62d069c7324498718331786d5fb7 = $(`<div id="html_df8b62d069c7324498718331786d5fb7" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>3. Pitt St Mall — AG LEGO Store</div><div style='color:#666;margin-bottom:4px;'>15:00  ·  쇼핑/시장</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간</div><div style='background:#f6f4ff;border-left:3px solid #3cb44b;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 세계 최대 LEGO 인증점</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 3 · 06.03 (수) · 타롱가 동물원 + 시티</div><a href='https://www.google.com/maps/search/?api=1&query=Pitt+St+Mall+%E2%80%94+AG+LEGO+Store+%40-33.8704%2C151.2087' target='_blank' style='display:inline-block;background:#3cb44b;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_342830abee23191b0a23f7660b3d5078.setContent(html_df8b62d069c7324498718331786d5fb7);
+            
+        
+
+        marker_083fe02a5ed0edf9206ad571564b394b.bindPopup(popup_342830abee23191b0a23f7660b3d5078)
+        ;
+
+        
+    
+    
+            marker_083fe02a5ed0edf9206ad571564b394b.bindTooltip(
+                `<div>
+                     3. Pitt St Mall — AG LEGO Store  ·  15:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_083fe02a5ed0edf9206ad571564b394b.setIcon(div_icon_19d17e29658c78ada68500e0f1986fae);
+            
+    
+            var marker_bae20a9dd4fb5f68cd0884b1d9016b03 = L.marker(
+                [-33.8712, 151.2078],
+                {
+}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            var div_icon_6e450791e9929fc622b22db7950078c9 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#3cb44b;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\udecd\ufe0f\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#3cb44b;border:1.5px solid #3cb44b;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e4\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_9c5b49a56b7a5c7e953ff6819179463d = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_fd3150ce9ba24a71a14bb3366ab5c781 = $(`<div id="html_fd3150ce9ba24a71a14bb3366ab5c781" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>4. Strand Arcade — Haigh's</div><div style='color:#666;margin-bottom:4px;'>16:00  ·  쇼핑/시장</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~30분</div><div style='background:#f6f4ff;border-left:3px solid #3cb44b;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 건물 자체도 명소</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 3 · 06.03 (수) · 타롱가 동물원 + 시티</div><a href='https://www.google.com/maps/search/?api=1&query=Strand+Arcade+%E2%80%94+Haigh%27s+%40-33.8712%2C151.2078' target='_blank' style='display:inline-block;background:#3cb44b;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_9c5b49a56b7a5c7e953ff6819179463d.setContent(html_fd3150ce9ba24a71a14bb3366ab5c781);
+            
+        
+
+        marker_bae20a9dd4fb5f68cd0884b1d9016b03.bindPopup(popup_9c5b49a56b7a5c7e953ff6819179463d)
+        ;
+
+        
+    
+    
+            marker_bae20a9dd4fb5f68cd0884b1d9016b03.bindTooltip(
+                `<div>
+                     4. Strand Arcade — Haigh's  ·  16:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_bae20a9dd4fb5f68cd0884b1d9016b03.setIcon(div_icon_6e450791e9929fc622b22db7950078c9);
+            
+    
+            var marker_4ee1e6afe38ddc654e62980c14b5f23e = L.marker(
+                [-33.8716, 151.2061],
+                {
+}
+            ).addTo(feature_group_7a54c7c4092abf85c129d02039b27f68);
+        
+    
+            var div_icon_797c0a92e50dfd297fb47549f9a9adf5 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#3cb44b;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\u2615\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#3cb44b;border:1.5px solid #3cb44b;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e5\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_69da467aa9cf837b5fec172e9a3a3b8a = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_c4d8817de081ed9f604fd59d8c124d1a = $(`<div id="html_c4d8817de081ed9f604fd59d8c124d1a" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>5. Gumption Coffee (QVB)</div><div style='color:#666;margin-bottom:4px;'>16:30  ·  카페/식당</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~3시간</div><div style='background:#f6f4ff;border-left:3px solid #3cb44b;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 QVB 인근 · 시드니 3대 커피</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 3 · 06.03 (수) · 타롱가 동물원 + 시티</div><a href='https://www.google.com/maps/search/?api=1&query=Gumption+Coffee+%28QVB%29+%40-33.8716%2C151.2061' target='_blank' style='display:inline-block;background:#3cb44b;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_69da467aa9cf837b5fec172e9a3a3b8a.setContent(html_c4d8817de081ed9f604fd59d8c124d1a);
+            
+        
+
+        marker_4ee1e6afe38ddc654e62980c14b5f23e.bindPopup(popup_69da467aa9cf837b5fec172e9a3a3b8a)
+        ;
+
+        
+    
+    
+            marker_4ee1e6afe38ddc654e62980c14b5f23e.bindTooltip(
+                `<div>
+                     5. Gumption Coffee (QVB)  ·  16:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_4ee1e6afe38ddc654e62980c14b5f23e.setIcon(div_icon_797c0a92e50dfd297fb47549f9a9adf5);
+            
+    
+            feature_group_7a54c7c4092abf85c129d02039b27f68.addTo(map_577bc5c034b5c13fd1f37345151f8702);
+        
+    
+            var feature_group_46d60cd409b94abc37ee3ce88243eb57 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_c69c8467a9c1e2f683b9b879508164c5 = L.polyline(
+                [[-33.883, 151.2071], [-33.7113, 150.312]],
+                {"bubblingMouseEvents": true, "color": "#911eb4", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#911eb4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            poly_line_c69c8467a9c1e2f683b9b879508164c5.bindTooltip(
+                `<div>
+                     Central Station → Katoomba Station  ·  84.9 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_465363d64ac9752f4fa5ce3d6375559e = L.polyline(
+                [[-33.7113, 150.312], [-33.7325, 150.3122]],
+                {"bubblingMouseEvents": true, "color": "#911eb4", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#911eb4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            poly_line_465363d64ac9752f4fa5ce3d6375559e.bindTooltip(
+                `<div>
+                     Katoomba Station → Echo Point (Three Sisters)  ·  2.4 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2242c67e22819a904a139ea346acd3c7 = L.polyline(
+                [[-33.7325, 150.3122], [-33.728, 150.3014]],
+                {"bubblingMouseEvents": true, "color": "#911eb4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#911eb4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            poly_line_2242c67e22819a904a139ea346acd3c7.bindTooltip(
+                `<div>
+                     Echo Point (Three Sisters) → Scenic World  ·  1.1 km · 도보 ~15분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_1d9d26fd3f48bda68418dc7513df7138 = L.polyline(
+                [[-33.728, 150.3014], [-33.7144, 150.3315]],
+                {"bubblingMouseEvents": true, "color": "#911eb4", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#911eb4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            poly_line_1d9d26fd3f48bda68418dc7513df7138.bindTooltip(
+                `<div>
+                     Scenic World → Leura Mall  ·  3.2 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_5bd5f9fa804569a46900646b48ddc352 = L.polyline(
+                [[-33.7144, 150.3315], [-33.883, 151.2071]],
+                {"bubblingMouseEvents": true, "color": "#911eb4", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#911eb4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            poly_line_5bd5f9fa804569a46900646b48ddc352.bindTooltip(
+                `<div>
+                     Leura Mall → Central Station (복귀)  ·  83.1 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_3c505cebac78e7d1deebe3eb6265f14c = L.polyline(
+                [[-33.883, 151.2071], [-33.8779, 151.2068]],
+                {"bubblingMouseEvents": true, "color": "#911eb4", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#911eb4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            poly_line_3c505cebac78e7d1deebe3eb6265f14c.bindTooltip(
+                `<div>
+                     Central Station (복귀) → Meriton Suites World Tower (복귀)  ·  0.6 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_3ec2c8292c5cfdb4e70cbb3d8e6cea35 = L.marker(
+                [-33.883300000000006, 151.2071],
+                {
+}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            var div_icon_fbcb66c7ef39b3040af38c712384fb7d = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#911eb4;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\ude87\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#911eb4;border:1.5px solid #911eb4;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e1\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_520882cc4c89ca27b1a2e085273293f7 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_135affb98154835ff0d14042439035e4 = $(`<div id="html_135affb98154835ff0d14042439035e4" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>1. Central Station</div><div style='color:#666;margin-bottom:4px;'>07:30  ·  이동/공항·역·페리</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~2시간 30분</div><div style='background:#f6f4ff;border-left:3px solid #911eb4;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 택시/도보</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 4 · 06.04 (목) · 블루 마운틴 당일치기</div><a href='https://www.google.com/maps/search/?api=1&query=Central+Station+%40-33.883%2C151.2071' target='_blank' style='display:inline-block;background:#911eb4;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_520882cc4c89ca27b1a2e085273293f7.setContent(html_135affb98154835ff0d14042439035e4);
+            
+        
+
+        marker_3ec2c8292c5cfdb4e70cbb3d8e6cea35.bindPopup(popup_520882cc4c89ca27b1a2e085273293f7)
+        ;
+
+        
+    
+    
+            marker_3ec2c8292c5cfdb4e70cbb3d8e6cea35.bindTooltip(
+                `<div>
+                     1. Central Station  ·  07:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_3ec2c8292c5cfdb4e70cbb3d8e6cea35.setIcon(div_icon_fbcb66c7ef39b3040af38c712384fb7d);
+            
+    
+            var marker_6e04932b173f63fad572ef2c04abf540 = L.marker(
+                [-33.7113, 150.312],
+                {
+}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            var div_icon_0debc3803e514a5e22e31202d10863aa = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#911eb4;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\ude87\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#911eb4;border:1.5px solid #911eb4;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e2\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_c3abcf73dcf0d4a9d92791e78f090c59 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_5389a8d741a3627c423896e6fdd4890f = $(`<div id="html_5389a8d741a3627c423896e6fdd4890f" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>2. Katoomba Station</div><div style='color:#666;margin-bottom:4px;'>10:00  ·  이동/공항·역·페리</div><div style='background:#f6f4ff;border-left:3px solid #911eb4;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 버스 686 또는 Hop-on-Hop-off</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 4 · 06.04 (목) · 블루 마운틴 당일치기</div><a href='https://www.google.com/maps/search/?api=1&query=Katoomba+Station+%40-33.7113%2C150.312' target='_blank' style='display:inline-block;background:#911eb4;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_c3abcf73dcf0d4a9d92791e78f090c59.setContent(html_5389a8d741a3627c423896e6fdd4890f);
+            
+        
+
+        marker_6e04932b173f63fad572ef2c04abf540.bindPopup(popup_c3abcf73dcf0d4a9d92791e78f090c59)
+        ;
+
+        
+    
+    
+            marker_6e04932b173f63fad572ef2c04abf540.bindTooltip(
+                `<div>
+                     2. Katoomba Station  ·  10:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_6e04932b173f63fad572ef2c04abf540.setIcon(div_icon_0debc3803e514a5e22e31202d10863aa);
+            
+    
+            var marker_013234f8f2e66455140ffe47405ca492 = L.marker(
+                [-33.7325, 150.3122],
+                {
+}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            var div_icon_645021d6f18d696b8e3e9d3c20e088a6 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#911eb4;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#911eb4;border:1.5px solid #911eb4;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e3\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_820cefa20392f80ec8cc768fe2182b9f = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_4fe1956838e2207aa54cbf987d9a29a8 = $(`<div id="html_4fe1956838e2207aa54cbf987d9a29a8" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>3. Echo Point (Three Sisters)</div><div style='color:#666;margin-bottom:4px;'>10:00  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간</div><div style='background:#f6f4ff;border-left:3px solid #911eb4;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 버스 686 또는 Hop-on-Hop-off</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 4 · 06.04 (목) · 블루 마운틴 당일치기</div><a href='https://www.google.com/maps/search/?api=1&query=Echo+Point+%28Three+Sisters%29+%40-33.7325%2C150.3122' target='_blank' style='display:inline-block;background:#911eb4;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_820cefa20392f80ec8cc768fe2182b9f.setContent(html_4fe1956838e2207aa54cbf987d9a29a8);
+            
+        
+
+        marker_013234f8f2e66455140ffe47405ca492.bindPopup(popup_820cefa20392f80ec8cc768fe2182b9f)
+        ;
+
+        
+    
+    
+            marker_013234f8f2e66455140ffe47405ca492.bindTooltip(
+                `<div>
+                     3. Echo Point (Three Sisters)  ·  10:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_013234f8f2e66455140ffe47405ca492.setIcon(div_icon_645021d6f18d696b8e3e9d3c20e088a6);
+            
+    
+            var marker_9963ffc39f0cc4a90b9c3842f1d9bccd = L.marker(
+                [-33.728, 150.3014],
+                {
+}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            var div_icon_48a04dff66f493b534ad35b63dfdf810 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#911eb4;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#911eb4;border:1.5px solid #911eb4;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e4\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_36c573ac8f45bc341910c5ce9a07300c = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_016695202b9ff1b027e810d270502c33 = $(`<div id="html_016695202b9ff1b027e810d270502c33" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>4. Scenic World</div><div style='color:#666;margin-bottom:4px;'>11:00  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~4시간</div><div style='background:#f6f4ff;border-left:3px solid #911eb4;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 Skyway · Cableway · Walkway · Railway</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 4 · 06.04 (목) · 블루 마운틴 당일치기</div><a href='https://www.google.com/maps/search/?api=1&query=Scenic+World+%40-33.728%2C150.3014' target='_blank' style='display:inline-block;background:#911eb4;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_36c573ac8f45bc341910c5ce9a07300c.setContent(html_016695202b9ff1b027e810d270502c33);
+            
+        
+
+        marker_9963ffc39f0cc4a90b9c3842f1d9bccd.bindPopup(popup_36c573ac8f45bc341910c5ce9a07300c)
+        ;
+
+        
+    
+    
+            marker_9963ffc39f0cc4a90b9c3842f1d9bccd.bindTooltip(
+                `<div>
+                     4. Scenic World  ·  11:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_9963ffc39f0cc4a90b9c3842f1d9bccd.setIcon(div_icon_48a04dff66f493b534ad35b63dfdf810);
+            
+    
+            var marker_c5273b8bb24accf6ff70fc570b9fbe5b = L.marker(
+                [-33.7144, 150.3315],
+                {
+}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            var div_icon_4ec8beace23f57bebc33858c642d0a89 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#911eb4;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\udecd\ufe0f\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#911eb4;border:1.5px solid #911eb4;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e5\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_9d3fffd9eb168f2c99c1bfb275b18359 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_b7c4e8f38ccfe0d98965ef8f45ae4efc = $(`<div id="html_b7c4e8f38ccfe0d98965ef8f45ae4efc" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>5. Leura Mall</div><div style='color:#666;margin-bottom:4px;'>15:00 (옵션)  ·  쇼핑/시장</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~3시간</div><div style='background:#f6f4ff;border-left:3px solid #911eb4;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 예쁜 거리 · 카페</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 4 · 06.04 (목) · 블루 마운틴 당일치기</div><a href='https://www.google.com/maps/search/?api=1&query=Leura+Mall+%40-33.7144%2C150.3315' target='_blank' style='display:inline-block;background:#911eb4;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_9d3fffd9eb168f2c99c1bfb275b18359.setContent(html_b7c4e8f38ccfe0d98965ef8f45ae4efc);
+            
+        
+
+        marker_c5273b8bb24accf6ff70fc570b9fbe5b.bindPopup(popup_9d3fffd9eb168f2c99c1bfb275b18359)
+        ;
+
+        
+    
+    
+            marker_c5273b8bb24accf6ff70fc570b9fbe5b.bindTooltip(
+                `<div>
+                     5. Leura Mall  ·  15:00 (옵션)
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_c5273b8bb24accf6ff70fc570b9fbe5b.setIcon(div_icon_4ec8beace23f57bebc33858c642d0a89);
+            
+    
+            var marker_45332e1ae24fe2a9796a675bc10ef9b3 = L.marker(
+                [-33.8827, 151.2071],
+                {
+}
+            ).addTo(feature_group_46d60cd409b94abc37ee3ce88243eb57);
+        
+    
+            var div_icon_c31d3dfd19184bca26a021a874e8cabf = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#911eb4;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\ude87\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#911eb4;border:1.5px solid #911eb4;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e6\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_148ca28aed039cfe03a0e4b0352fb672 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_d27111f05accf612a2df3b336c8185bc = $(`<div id="html_d27111f05accf612a2df3b336c8185bc" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>6. Central Station (복귀)</div><div style='color:#666;margin-bottom:4px;'>18:00  ·  이동/공항·역·페리</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 4 · 06.04 (목) · 블루 마운틴 당일치기</div><a href='https://www.google.com/maps/search/?api=1&query=Central+Station+%28%EB%B3%B5%EA%B7%80%29+%40-33.883%2C151.2071' target='_blank' style='display:inline-block;background:#911eb4;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_148ca28aed039cfe03a0e4b0352fb672.setContent(html_d27111f05accf612a2df3b336c8185bc);
+            
+        
+
+        marker_45332e1ae24fe2a9796a675bc10ef9b3.bindPopup(popup_148ca28aed039cfe03a0e4b0352fb672)
+        ;
+
+        
+    
+    
+            marker_45332e1ae24fe2a9796a675bc10ef9b3.bindTooltip(
+                `<div>
+                     6. Central Station (복귀)  ·  18:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_45332e1ae24fe2a9796a675bc10ef9b3.setIcon(div_icon_c31d3dfd19184bca26a021a874e8cabf);
+            
+    
+            feature_group_46d60cd409b94abc37ee3ce88243eb57.addTo(map_577bc5c034b5c13fd1f37345151f8702);
+        
+    
+            var feature_group_0e04e264fc3efc85875b1f07b7f1d5da = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_0fec65dfd3de2fe4b391668a8c1f314b = L.polyline(
+                [[-33.8978, 151.1796], [-33.8886, 151.1873]],
+                {"bubblingMouseEvents": true, "color": "#f58231", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#f58231", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            poly_line_0fec65dfd3de2fe4b391668a8c1f314b.bindTooltip(
+                `<div>
+                     Newtown King St → University of Sydney  ·  1.2 km · 도보 ~17분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_c6996475d6057f7228b6b23f4dacc671 = L.polyline(
+                [[-33.8886, 151.1873], [-33.8975, 151.1798]],
+                {"bubblingMouseEvents": true, "color": "#f58231", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#f58231", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            poly_line_c6996475d6057f7228b6b23f4dacc671.bindTooltip(
+                `<div>
+                     University of Sydney → Elizabeth's Bookshop (Newtown)  ·  1.2 km · 도보 ~16분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_1d415f0d1f86532eda0be3aae5ea83ff = L.polyline(
+                [[-33.8975, 151.1798], [-33.8623, 151.2002]],
+                {"bubblingMouseEvents": true, "color": "#f58231", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#f58231", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            poly_line_1d415f0d1f86532eda0be3aae5ea83ff.bindTooltip(
+                `<div>
+                     Elizabeth's Bookshop (Newtown) → Barangaroo / Wulugul Walk  ·  4.3 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_21862b69d93bf6a871a1a667da35bfae = L.polyline(
+                [[-33.8623, 151.2002], [-33.8597, 151.2049]],
+                {"bubblingMouseEvents": true, "color": "#f58231", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#f58231", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            poly_line_21862b69d93bf6a871a1a667da35bfae.bindTooltip(
+                `<div>
+                     Barangaroo / Wulugul Walk → Observatory Hill / Sydney Observatory  ·  0.5 km · 도보 ~7분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_a45372443a18ba5b0f8cc493e93abd07 = L.polyline(
+                [[-33.8597, 151.2049], [-33.8597, 151.2089]],
+                {"bubblingMouseEvents": true, "color": "#f58231", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#f58231", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            poly_line_a45372443a18ba5b0f8cc493e93abd07.bindTooltip(
+                `<div>
+                     Observatory Hill / Sydney Observatory → The Rocks  ·  0.4 km · 도보 ~5분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_9e42118de1955bc96487449f6875b9d2 = L.marker(
+                [-33.8978, 151.1796],
+                {
+}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            var div_icon_836c7276aedc461fe9dafae8a4352ecd = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f58231;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\udecd\ufe0f\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f58231;border:1.5px solid #f58231;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e1\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_deb73a161c3838b63cd6842470010480 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_96abcb766ed6e81d7a0f6b35f884178b = $(`<div id="html_96abcb766ed6e81d7a0f6b35f884178b" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>1. Newtown King St</div><div style='color:#666;margin-bottom:4px;'>10:00  ·  쇼핑/시장</div><div style='background:#f6f4ff;border-left:3px solid #f58231;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 Quadrangle 건물</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 5 · 06.05 (금) · 뉴타운 + 바랑가루 + 옵저보토리 힐</div><a href='https://www.google.com/maps/search/?api=1&query=Newtown+King+St+%40-33.8978%2C151.1796' target='_blank' style='display:inline-block;background:#f58231;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_deb73a161c3838b63cd6842470010480.setContent(html_96abcb766ed6e81d7a0f6b35f884178b);
+            
+        
+
+        marker_9e42118de1955bc96487449f6875b9d2.bindPopup(popup_deb73a161c3838b63cd6842470010480)
+        ;
+
+        
+    
+    
+            marker_9e42118de1955bc96487449f6875b9d2.bindTooltip(
+                `<div>
+                     1. Newtown King St  ·  10:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_9e42118de1955bc96487449f6875b9d2.setIcon(div_icon_836c7276aedc461fe9dafae8a4352ecd);
+            
+    
+            var marker_ae2908d35b20720788e18fc26af2aee1 = L.marker(
+                [-33.8886, 151.1873],
+                {
+}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            var div_icon_65eb20d5059752dd59af76750cdf9671 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f58231;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f58231;border:1.5px solid #f58231;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e2\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_56cbbbe650a2cbda38a1150d99f0797b = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_3da5f762d6baf9a3897ff1677af5ec1a = $(`<div id="html_3da5f762d6baf9a3897ff1677af5ec1a" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>2. University of Sydney</div><div style='color:#666;margin-bottom:4px;'>10:00  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간 30분</div><div style='background:#f6f4ff;border-left:3px solid #f58231;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 Quadrangle 건물</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 5 · 06.05 (금) · 뉴타운 + 바랑가루 + 옵저보토리 힐</div><a href='https://www.google.com/maps/search/?api=1&query=University+of+Sydney+%40-33.8886%2C151.1873' target='_blank' style='display:inline-block;background:#f58231;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_56cbbbe650a2cbda38a1150d99f0797b.setContent(html_3da5f762d6baf9a3897ff1677af5ec1a);
+            
+        
+
+        marker_ae2908d35b20720788e18fc26af2aee1.bindPopup(popup_56cbbbe650a2cbda38a1150d99f0797b)
+        ;
+
+        
+    
+    
+            marker_ae2908d35b20720788e18fc26af2aee1.bindTooltip(
+                `<div>
+                     2. University of Sydney  ·  10:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_ae2908d35b20720788e18fc26af2aee1.setIcon(div_icon_65eb20d5059752dd59af76750cdf9671);
+            
+    
+            var marker_514c512c2b2cc94b5d25feb6836c59f8 = L.marker(
+                [-33.8975, 151.1798],
+                {
+}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            var div_icon_61847a0b83cd0fda3e5c55cb2f8b0be5 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f58231;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\udecd\ufe0f\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f58231;border:1.5px solid #f58231;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e3\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_c8ab3e763735016676118c56dd36f286 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_f397e122962cac343c3cd2a8405a18f5 = $(`<div id="html_f397e122962cac343c3cd2a8405a18f5" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>3. Elizabeth's Bookshop (Newtown)</div><div style='color:#666;margin-bottom:4px;'>11:30  ·  쇼핑/시장</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~3시간 30분</div><div style='background:#f6f4ff;border-left:3px solid #f58231;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 그래피티 거리</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 5 · 06.05 (금) · 뉴타운 + 바랑가루 + 옵저보토리 힐</div><a href='https://www.google.com/maps/search/?api=1&query=Elizabeth%27s+Bookshop+%28Newtown%29+%40-33.8975%2C151.1798' target='_blank' style='display:inline-block;background:#f58231;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_c8ab3e763735016676118c56dd36f286.setContent(html_f397e122962cac343c3cd2a8405a18f5);
+            
+        
+
+        marker_514c512c2b2cc94b5d25feb6836c59f8.bindPopup(popup_c8ab3e763735016676118c56dd36f286)
+        ;
+
+        
+    
+    
+            marker_514c512c2b2cc94b5d25feb6836c59f8.bindTooltip(
+                `<div>
+                     3. Elizabeth's Bookshop (Newtown)  ·  11:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_514c512c2b2cc94b5d25feb6836c59f8.setIcon(div_icon_61847a0b83cd0fda3e5c55cb2f8b0be5);
+            
+    
+            var marker_74cf3b8d082147e366c7c652c82de9a6 = L.marker(
+                [-33.8623, 151.2002],
+                {
+}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            var div_icon_9a5449cc1f98093bc6ba354dfbaaec6d = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f58231;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f58231;border:1.5px solid #f58231;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e4\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_d3bf7e4be6e514d02f461f7cded93240 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_e1ccf3edec470867f7ed05578720dd6d = $(`<div id="html_e1ccf3edec470867f7ed05578720dd6d" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>4. Barangaroo / Wulugul Walk</div><div style='color:#666;margin-bottom:4px;'>15:00  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간 40분</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 5 · 06.05 (금) · 뉴타운 + 바랑가루 + 옵저보토리 힐</div><a href='https://www.google.com/maps/search/?api=1&query=Barangaroo+%2F+Wulugul+Walk+%40-33.8623%2C151.2002' target='_blank' style='display:inline-block;background:#f58231;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_d3bf7e4be6e514d02f461f7cded93240.setContent(html_e1ccf3edec470867f7ed05578720dd6d);
+            
+        
+
+        marker_74cf3b8d082147e366c7c652c82de9a6.bindPopup(popup_d3bf7e4be6e514d02f461f7cded93240)
+        ;
+
+        
+    
+    
+            marker_74cf3b8d082147e366c7c652c82de9a6.bindTooltip(
+                `<div>
+                     4. Barangaroo / Wulugul Walk  ·  15:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_74cf3b8d082147e366c7c652c82de9a6.setIcon(div_icon_9a5449cc1f98093bc6ba354dfbaaec6d);
+            
+    
+            var marker_96ef4a32a04deeb1945b70e0d9c1dc83 = L.marker(
+                [-33.8597, 151.2049],
+                {
+}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            var div_icon_e523f2d8ec2f3d951cd17a1016f4419a = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f58231;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfaf\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f58231;border:1.5px solid #f58231;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e5\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_269ae65f2f4c25fbe24710a8ae8c41bf = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_dd5c80ef9d8dc7cf9c9903db3cf5fdea = $(`<div id="html_dd5c80ef9d8dc7cf9c9903db3cf5fdea" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>5. Observatory Hill / Sydney Observatory</div><div style='color:#666;margin-bottom:4px;'>16:40 일몰  ·  관광/뷰/이벤트</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~2시간 50분</div><div style='background:#f6f4ff;border-left:3px solid #f58231;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 잔디밭 · 일몰 16:54</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 5 · 06.05 (금) · 뉴타운 + 바랑가루 + 옵저보토리 힐</div><a href='https://www.google.com/maps/search/?api=1&query=Observatory+Hill+%2F+Sydney+Observatory+%40-33.8597%2C151.2049' target='_blank' style='display:inline-block;background:#f58231;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_269ae65f2f4c25fbe24710a8ae8c41bf.setContent(html_dd5c80ef9d8dc7cf9c9903db3cf5fdea);
+            
+        
+
+        marker_96ef4a32a04deeb1945b70e0d9c1dc83.bindPopup(popup_269ae65f2f4c25fbe24710a8ae8c41bf)
+        ;
+
+        
+    
+    
+            marker_96ef4a32a04deeb1945b70e0d9c1dc83.bindTooltip(
+                `<div>
+                     5. Observatory Hill / Sydney Observatory  ·  16:40 일몰
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_96ef4a32a04deeb1945b70e0d9c1dc83.setIcon(div_icon_e523f2d8ec2f3d951cd17a1016f4419a);
+            
+    
+            var marker_5b6db0b60f5db75df23e10fa589da8ab = L.marker(
+                [-33.8597, 151.2089],
+                {
+}
+            ).addTo(feature_group_0e04e264fc3efc85875b1f07b7f1d5da);
+        
+    
+            var div_icon_7a77d6bcc99f2e7f0776e1eafce65e78 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f58231;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\u2615\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f58231;border:1.5px solid #f58231;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e6\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_45b794e60ee5c2bfbc7a39b89c569af2 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_77992e86b7e10985d2f16f5199c948f2 = $(`<div id="html_77992e86b7e10985d2f16f5199c948f2" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>6. The Rocks</div><div style='color:#666;margin-bottom:4px;'>19:30 저녁  ·  카페/식당</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 5 · 06.05 (금) · 뉴타운 + 바랑가루 + 옵저보토리 힐</div><a href='https://www.google.com/maps/search/?api=1&query=The+Rocks+%40-33.8597%2C151.2089' target='_blank' style='display:inline-block;background:#f58231;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_45b794e60ee5c2bfbc7a39b89c569af2.setContent(html_77992e86b7e10985d2f16f5199c948f2);
+            
+        
+
+        marker_5b6db0b60f5db75df23e10fa589da8ab.bindPopup(popup_45b794e60ee5c2bfbc7a39b89c569af2)
+        ;
+
+        
+    
+    
+            marker_5b6db0b60f5db75df23e10fa589da8ab.bindTooltip(
+                `<div>
+                     6. The Rocks  ·  19:30 저녁
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_5b6db0b60f5db75df23e10fa589da8ab.setIcon(div_icon_7a77d6bcc99f2e7f0776e1eafce65e78);
+            
+    
+            feature_group_0e04e264fc3efc85875b1f07b7f1d5da.addTo(map_577bc5c034b5c13fd1f37345151f8702);
+        
+    
+            var feature_group_04354730b81cc7afb3beb2ff283770b0 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_44f20d1f7887f8786e9d34a59f7c9e83 = L.polyline(
+                [[-33.8801, 151.2042], [-33.8786, 151.2046]],
+                {"bubblingMouseEvents": true, "color": "#f032e6", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#f032e6", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            poly_line_44f20d1f7887f8786e9d34a59f7c9e83.bindTooltip(
+                `<div>
+                     Paddy's Markets (Haymarket) → Chinatown  ·  0.2 km · 도보 ~2분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_7fac227b8621e7ca7cfbda1c692325f6 = L.polyline(
+                [[-33.8786, 151.2046], [-33.8721, 151.201]],
+                {"bubblingMouseEvents": true, "color": "#f032e6", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#f032e6", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            poly_line_7fac227b8621e7ca7cfbda1c692325f6.bindTooltip(
+                `<div>
+                     Chinatown → Darling Harbour (Vivid Kids)  ·  0.8 km · 도보 ~11분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_dd703c1a2da483ba2461d981de04011c = L.polyline(
+                [[-33.8721, 151.201], [-33.852, 151.212]],
+                {"bubblingMouseEvents": true, "color": "#f032e6", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#f032e6", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            poly_line_dd703c1a2da483ba2461d981de04011c.bindTooltip(
+                `<div>
+                     Darling Harbour (Vivid Kids) → Jeffrey Street Wharf (Kirribilli)  ·  2.5 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_167fa5adef719b3f2591be5e532adbe5 = L.polyline(
+                [[-33.852, 151.212], [-33.8482, 151.2102]],
+                {"bubblingMouseEvents": true, "color": "#f032e6", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#f032e6", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            poly_line_167fa5adef719b3f2591be5e532adbe5.bindTooltip(
+                `<div>
+                     Jeffrey Street Wharf (Kirribilli) → Luna Park (Milsons Point)  ·  0.5 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_58cadffc60a8c62517538a6c496ff13d = L.polyline(
+                [[-33.8482, 151.2102], [-33.8721, 151.201]],
+                {"bubblingMouseEvents": true, "color": "#f032e6", "dashArray": "8,8", "dashOffset": null, "fill": false, "fillColor": "#f032e6", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            poly_line_58cadffc60a8c62517538a6c496ff13d.bindTooltip(
+                `<div>
+                     Luna Park (Milsons Point) → Darling Harbour 불꽃  ·  2.8 km · 대중교통/장거리
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_54323b7e235636509c26d0317e090ece = L.polyline(
+                [[-33.8721, 151.201], [-33.8779, 151.2068]],
+                {"bubblingMouseEvents": true, "color": "#f032e6", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#f032e6", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            poly_line_54323b7e235636509c26d0317e090ece.bindTooltip(
+                `<div>
+                     Darling Harbour 불꽃 → Meriton Suites World Tower (복귀)  ·  0.8 km · 도보 ~11분
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_fc1dcd31ca2661ec9791c3afa3410836 = L.marker(
+                [-33.8801, 151.2042],
+                {
+}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            var div_icon_a7c023fdd5fb270006fed8487f16e796 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f032e6;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\udecd\ufe0f\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f032e6;border:1.5px solid #f032e6;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e1\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_1ccf364b0249616c23339fa8f399cca2 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_76923110d45a1318dfae93f303e75943 = $(`<div id="html_76923110d45a1318dfae93f303e75943" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>1. Paddy's Markets (Haymarket)</div><div style='color:#666;margin-bottom:4px;'>10:00  ·  쇼핑/시장</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~2시간 30분</div><div style='background:#f6f4ff;border-left:3px solid #f032e6;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 주말 기념품 쇼핑</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 6 · 06.06 (토) · 패디스 마켓 + Luna Park + 불꽃</div><a href='https://www.google.com/maps/search/?api=1&query=Paddy%27s+Markets+%28Haymarket%29+%40-33.8801%2C151.2042' target='_blank' style='display:inline-block;background:#f032e6;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_1ccf364b0249616c23339fa8f399cca2.setContent(html_76923110d45a1318dfae93f303e75943);
+            
+        
+
+        marker_fc1dcd31ca2661ec9791c3afa3410836.bindPopup(popup_1ccf364b0249616c23339fa8f399cca2)
+        ;
+
+        
+    
+    
+            marker_fc1dcd31ca2661ec9791c3afa3410836.bindTooltip(
+                `<div>
+                     1. Paddy's Markets (Haymarket)  ·  10:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_fc1dcd31ca2661ec9791c3afa3410836.setIcon(div_icon_a7c023fdd5fb270006fed8487f16e796);
+            
+    
+            var marker_3df570bc811d8091483a3c1646f87196 = L.marker(
+                [-33.8786, 151.2046],
+                {
+}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            var div_icon_96143a4eb65340e51cafff661c8fe78f = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f032e6;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\u2615\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f032e6;border:1.5px solid #f032e6;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e2\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_127655469df49f3fac94cff399024969 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_53e8c82e100a6a146ee66c22514ee2b7 = $(`<div id="html_53e8c82e100a6a146ee66c22514ee2b7" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>2. Chinatown</div><div style='color:#666;margin-bottom:4px;'>12:30  ·  카페/식당</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간 30분</div><div style='background:#f6f4ff;border-left:3px solid #f032e6;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 딤섬 추천</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 6 · 06.06 (토) · 패디스 마켓 + Luna Park + 불꽃</div><a href='https://www.google.com/maps/search/?api=1&query=Chinatown+%40-33.8786%2C151.2046' target='_blank' style='display:inline-block;background:#f032e6;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_127655469df49f3fac94cff399024969.setContent(html_53e8c82e100a6a146ee66c22514ee2b7);
+            
+        
+
+        marker_3df570bc811d8091483a3c1646f87196.bindPopup(popup_127655469df49f3fac94cff399024969)
+        ;
+
+        
+    
+    
+            marker_3df570bc811d8091483a3c1646f87196.bindTooltip(
+                `<div>
+                     2. Chinatown  ·  12:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_3df570bc811d8091483a3c1646f87196.setIcon(div_icon_96143a4eb65340e51cafff661c8fe78f);
+            
+    
+            var marker_7685fdc934e4c66cfc519d87d6ba9cc9 = L.marker(
+                [-33.872400000000006, 151.201],
+                {
+}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            var div_icon_1e48abdb63ab14639af36c84a86a2722 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f032e6;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfa1\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f032e6;border:1.5px solid #f032e6;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e3\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_4d8f665da6b88044c404381343a6a27b = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_6d5cc3f468316d3bac99759ab1213d46 = $(`<div id="html_6d5cc3f468316d3bac99759ab1213d46" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>3. Darling Harbour (Vivid Kids)</div><div style='color:#666;margin-bottom:4px;'>14:00  ·  동물원/놀이/야경</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간 30분</div><div style='background:#f6f4ff;border-left:3px solid #f032e6;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 Vivid Sydney 종료일 사전 확인 (보통 6월 중순)</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 6 · 06.06 (토) · 패디스 마켓 + Luna Park + 불꽃</div><a href='https://www.google.com/maps/search/?api=1&query=Darling+Harbour+%28Vivid+Kids%29+%40-33.8721%2C151.201' target='_blank' style='display:inline-block;background:#f032e6;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_4d8f665da6b88044c404381343a6a27b.setContent(html_6d5cc3f468316d3bac99759ab1213d46);
+            
+        
+
+        marker_7685fdc934e4c66cfc519d87d6ba9cc9.bindPopup(popup_4d8f665da6b88044c404381343a6a27b)
+        ;
+
+        
+    
+    
+            marker_7685fdc934e4c66cfc519d87d6ba9cc9.bindTooltip(
+                `<div>
+                     3. Darling Harbour (Vivid Kids)  ·  14:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_7685fdc934e4c66cfc519d87d6ba9cc9.setIcon(div_icon_1e48abdb63ab14639af36c84a86a2722);
+            
+    
+            var marker_fb21e3e9296ba5d107a8fc911595d3eb = L.marker(
+                [-33.852, 151.212],
+                {
+}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            var div_icon_a8c9ac0b107525de18e3ca647a8319f4 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f032e6;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83d\ude87\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f032e6;border:1.5px solid #f032e6;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e4\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_433caec053d84d1eeb66e5a173bd3b9c = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_8844ad6e78707146f67d32e5c24b6578 = $(`<div id="html_8844ad6e78707146f67d32e5c24b6578" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>4. Jeffrey Street Wharf (Kirribilli)</div><div style='color:#666;margin-bottom:4px;'>15:30  ·  이동/공항·역·페리</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~30분</div><div style='background:#f6f4ff;border-left:3px solid #f032e6;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 페리 또는 트레인 → Milsons Point 도보</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 6 · 06.06 (토) · 패디스 마켓 + Luna Park + 불꽃</div><a href='https://www.google.com/maps/search/?api=1&query=Jeffrey+Street+Wharf+%28Kirribilli%29+%40-33.852%2C151.212' target='_blank' style='display:inline-block;background:#f032e6;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_433caec053d84d1eeb66e5a173bd3b9c.setContent(html_8844ad6e78707146f67d32e5c24b6578);
+            
+        
+
+        marker_fb21e3e9296ba5d107a8fc911595d3eb.bindPopup(popup_433caec053d84d1eeb66e5a173bd3b9c)
+        ;
+
+        
+    
+    
+            marker_fb21e3e9296ba5d107a8fc911595d3eb.bindTooltip(
+                `<div>
+                     4. Jeffrey Street Wharf (Kirribilli)  ·  15:30
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_fb21e3e9296ba5d107a8fc911595d3eb.setIcon(div_icon_a8c9ac0b107525de18e3ca647a8319f4);
+            
+    
+            var marker_f56ce5e9000001cf7e9766c8dd36f600 = L.marker(
+                [-33.8482, 151.2102],
+                {
+}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            var div_icon_624b6cb4cb09f0bc11bdd3a2b925271b = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f032e6;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfa1\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f032e6;border:1.5px solid #f032e6;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e5\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_a1a6a175b6003aa6110f4e98ce880391 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_eb3374ff7d3ab7354a53b5c3e8edbfa0 = $(`<div id="html_eb3374ff7d3ab7354a53b5c3e8edbfa0" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>5. Luna Park (Milsons Point)</div><div style='color:#666;margin-bottom:4px;'>16:00  ·  동물원/놀이/야경</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~4시간</div><div style='background:#f6f4ff;border-left:3px solid #f032e6;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 야경 명소 · 입장 무료, 놀이기구 별도</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 6 · 06.06 (토) · 패디스 마켓 + Luna Park + 불꽃</div><a href='https://www.google.com/maps/search/?api=1&query=Luna+Park+%28Milsons+Point%29+%40-33.8482%2C151.2102' target='_blank' style='display:inline-block;background:#f032e6;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_a1a6a175b6003aa6110f4e98ce880391.setContent(html_eb3374ff7d3ab7354a53b5c3e8edbfa0);
+            
+        
+
+        marker_f56ce5e9000001cf7e9766c8dd36f600.bindPopup(popup_a1a6a175b6003aa6110f4e98ce880391)
+        ;
+
+        
+    
+    
+            marker_f56ce5e9000001cf7e9766c8dd36f600.bindTooltip(
+                `<div>
+                     5. Luna Park (Milsons Point)  ·  16:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_f56ce5e9000001cf7e9766c8dd36f600.setIcon(div_icon_624b6cb4cb09f0bc11bdd3a2b925271b);
+            
+    
+            var marker_1447edefd00bea0b942d4d1d0de8bf8b = L.marker(
+                [-33.8718, 151.201],
+                {
+}
+            ).addTo(feature_group_04354730b81cc7afb3beb2ff283770b0);
+        
+    
+            var div_icon_930900eeef62e9d1c13c1ff0a667f2b7 = L.divIcon({
+  "html": "\u003cdiv class=\u0027syd-mk-wrap\u0027 style=\u0027position:relative;width:34px;height:34px;\u0027\u003e\u003cdiv class=\u0027syd-mk-bubble\u0027 style=\u0027width:34px;height:34px;border-radius:50%;background:#f032e6;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;\u0027\u003e\ud83c\udfa1\u003c/div\u003e\u003cdiv style=\u0027position:absolute;top:-6px;right:-6px;background:white;color:#f032e6;border:1.5px solid #f032e6;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;\u0027\u003e6\u003c/div\u003e\u003c/div\u003e",
+  "iconSize": [34, 34],
+  "iconAnchor": [17, 17],
+  "className": "empty",
+});
+        
+    
+        var popup_69ebead0bf91ac148e7efee051ccbac2 = L.popup({
+  "maxWidth": 300,
+});
+
+        
+            
+                var html_c70b9490837c15a405ae8e88bae2b0d3 = $(`<div id="html_c70b9490837c15a405ae8e88bae2b0d3" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;min-width:220px;max-width:280px;'><div style='font-weight:700;font-size:14px;margin-bottom:4px;'>6. Darling Harbour 불꽃</div><div style='color:#666;margin-bottom:4px;'>20:00  ·  동물원/놀이/야경</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>⏱ 머무름 ~1시간</div><div style='background:#f6f4ff;border-left:3px solid #f032e6;padding:5px 8px;margin:6px 0;font-size:12px;color:#444;line-height:1.45;'>📝 보통 매주 토 20:30 · 일정 사전 확인</div><div style='color:#888;font-size:11px;margin-bottom:6px;'>Day 6 · 06.06 (토) · 패디스 마켓 + Luna Park + 불꽃</div><a href='https://www.google.com/maps/search/?api=1&query=Darling+Harbour+%EB%B6%88%EA%BD%83+%40-33.8721%2C151.201' target='_blank' style='display:inline-block;background:#f032e6;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_69ebead0bf91ac148e7efee051ccbac2.setContent(html_c70b9490837c15a405ae8e88bae2b0d3);
+            
+        
+
+        marker_1447edefd00bea0b942d4d1d0de8bf8b.bindPopup(popup_69ebead0bf91ac148e7efee051ccbac2)
+        ;
+
+        
+    
+    
+            marker_1447edefd00bea0b942d4d1d0de8bf8b.bindTooltip(
+                `<div>
+                     6. Darling Harbour 불꽃  ·  20:00
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_1447edefd00bea0b942d4d1d0de8bf8b.setIcon(div_icon_930900eeef62e9d1c13c1ff0a667f2b7);
+            
+    
+            feature_group_04354730b81cc7afb3beb2ff283770b0.addTo(map_577bc5c034b5c13fd1f37345151f8702);
+        
+    
+            var marker_fb04d9e8298e2959fb32444743c0825e = L.marker(
+                [-33.8779, 151.2068],
+                {
+}
+            ).addTo(map_577bc5c034b5c13fd1f37345151f8702);
+        
+    
+            var div_icon_c8c375cf28f89158284970be811d2cec = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:38px;height:38px;border-radius:50%;background:#111;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;\u0027\u003e\ud83c\udfe8\u003c/div\u003e",
+  "iconSize": [38, 38],
+  "iconAnchor": [19, 19],
+  "className": "empty",
+});
+        
+    
+        var popup_4a21989c2f8f9c47105600933d9dfc31 = L.popup({
+  "maxWidth": 280,
+});
+
+        
+            
+                var html_d88b185ba737efe114a147d920494103 = $(`<div id="html_d88b185ba737efe114a147d920494103" style="width: 100.0%; height: 100.0%;"><div style='font-family:-apple-system,sans-serif;font-size:13px;'><div style='font-weight:700;font-size:14px;'>🏨 Meriton Suites World Tower</div><div style='color:#666;margin:4px 0;'>95 Liverpool St, Sydney CBD<br>체크인 15:00 / 체크아웃 11:00</div><a href='https://www.google.com/maps/search/?api=1&query=Meriton+Suites+World+Tower+%40-33.8779%2C151.2068' target='_blank' style='display:inline-block;background:#111;color:white;padding:4px 10px;border-radius:4px;text-decoration:none;font-size:12px;'>Google Maps 열기 →</a></div></div>`)[0];
+                popup_4a21989c2f8f9c47105600933d9dfc31.setContent(html_d88b185ba737efe114a147d920494103);
+            
+        
+
+        marker_fb04d9e8298e2959fb32444743c0825e.bindPopup(popup_4a21989c2f8f9c47105600933d9dfc31)
+        ;
+
+        
+    
+    
+            marker_fb04d9e8298e2959fb32444743c0825e.bindTooltip(
+                `<div>
+                     베이스 호텔 · Meriton Suites World Tower
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_fb04d9e8298e2959fb32444743c0825e.setIcon(div_icon_c8c375cf28f89158284970be811d2cec);
+            
+    
+            var layer_control_4feff9ba77c76d4b6ddc7cbcf273f2be_layers = {
+                base_layers : {
+                    "Light" : tile_layer_e5adad7ad7b19ae9e39e3f52f86543cf,
+                    "Dark" : tile_layer_5714c50b6689cb15e68a149f6d9ff6cc,
+                },
+                overlays :  {
+                    "Day 1 \u00b7 10.4 km \u00b7 \ub3c4\ucc29 + \uc2dc\ud2f0 \uc801\uc751" : feature_group_13fd0a580aa4f35040b1cffa244790cd,
+                    "Day 2 \u00b7 7.3 km \u00b7 Circular Quay + \uc2dd\ubb3c\uc6d0 \uc77c\ubab0" : feature_group_bed8ea567580ef357a7e5138d46e17f8,
+                    "Day 3 \u00b7 8.7 km \u00b7 \ud0c0\ub871\uac00 \ub3d9\ubb3c\uc6d0 + \uc2dc\ud2f0" : feature_group_7a54c7c4092abf85c129d02039b27f68,
+                    "Day 4 \u00b7 175.1 km \u00b7 \ube14\ub8e8 \ub9c8\uc6b4\ud2f4 \ub2f9\uc77c\uce58\uae30" : feature_group_46d60cd409b94abc37ee3ce88243eb57,
+                    "Day 5 \u00b7 7.7 km \u00b7 \ub274\ud0c0\uc6b4 + \ubc14\ub791\uac00\ub8e8 + \uc635\uc800\ubcf4\ud1a0\ub9ac \ud790" : feature_group_0e04e264fc3efc85875b1f07b7f1d5da,
+                    "Day 6 \u00b7 7.5 km \u00b7 \ud328\ub514\uc2a4 \ub9c8\ucf13 + Luna Park + \ubd88\uaf43" : feature_group_04354730b81cc7afb3beb2ff283770b0,
+                },
+            };
+            let layer_control_4feff9ba77c76d4b6ddc7cbcf273f2be = L.control.layers(
+                layer_control_4feff9ba77c76d4b6ddc7cbcf273f2be_layers.base_layers,
+                layer_control_4feff9ba77c76d4b6ddc7cbcf273f2be_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_577bc5c034b5c13fd1f37345151f8702);
+
+        
+    
+            map_577bc5c034b5c13fd1f37345151f8702.fitBounds(
+                [[-33.9399, 150.3014], [-33.7113, 151.2412]],
+                {"padding": [40, 40]}
+            );
+        
+</script>
+</html>
